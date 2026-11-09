@@ -19,6 +19,7 @@ final class EngineBootstrap {
     private var engine: EventTapEngine?
     private var tickTimer: Timer?
     private var deviceTimer: Timer?
+    private var appWatcher: AppWatcher?
     private var cancellable: AnyCancellable?
 
     init(devices: DeviceManager, permissions: PermissionsController) {
@@ -77,5 +78,15 @@ final class EngineBootstrap {
         }
         RunLoop.main.add(deviceRefresh, forMode: .common)
         deviceTimer = deviceRefresh
+
+        // Frontmost-app tracking (Task 18): NSWorkspace activation
+        // notifications record which bundle ID is frontmost. Phase 1 only
+        // stores the value; Phase 3's per-app profiles consume it. The
+        // notification block hops to the main queue (see the calling
+        // discipline above), so the unsynchronized `frontmostBundleID` write
+        // stays on the same thread as everything else here.
+        let appWatcher = AppWatcher()
+        self.appWatcher = appWatcher
+        appWatcher.start()
     }
 }
