@@ -1,7 +1,12 @@
 import AppKit
+import ArtMouseCore
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
+    private var permissions: PermissionsController?
+    private var bootstrap: EngineBootstrap?
+    private var store: SettingsStore?           // shared with AppModel in Task 16
+    private var devices: DeviceManager?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let menu = NSMenu()
@@ -18,11 +23,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         item.menu = menu
         statusItem = item
 
-        startEngine()
+        let permissions = PermissionsController()
+        self.permissions = permissions
+        if BootstrapDecision.shouldRunEngine(arguments: CommandLine.arguments,
+                                             flagsAtLaunch: BootstrapDecision.currentFlags()) {
+            let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            let directory = appSupport.appendingPathComponent("artMouse", isDirectory: true)
+            try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let store = SettingsStore(directory: directory)
+            let devices = DeviceManager(enumerator: IOKitDeviceEnumerator())
+            self.store = store
+            self.devices = devices
+            let bootstrap = EngineBootstrap(devices: devices, permissions: permissions)
+            bootstrap.start(store: store)
+            self.bootstrap = bootstrap
+        }
     }
-
-    /// Engine bootstrap; wired in Task 15.
-    func startEngine() {}
 
     @objc func openSettings() {
         NSApp.activate(ignoringOtherApps: true)
