@@ -26,6 +26,7 @@ public final class SettingsStore: ObservableObject {
 
     public func reload() {
         guard let data = try? Data(contentsOf: fileURL) else {
+            settings = .default
             if FileManager.default.fileExists(atPath: fileURL.path) {
                 lastLoadWarnings = ["Could not read \(Self.settingsFileName); using defaults."]
             }

@@ -42,4 +42,26 @@ final class SettingsStoreTests: XCTestCase {
     func testDecodeThrowsOnGarbage() {
         XCTAssertThrowsError(try SettingsStore.decode(Data("nope".utf8)))
     }
+
+    func testUnreadableFileFallsBackToDefaultsWithWarning() throws {
+        let dir = tempDirectory()
+        let store = SettingsStore(directory: dir)
+        var nonDefault = GlobalSettings.default
+        nonDefault.buttonBindings = [
+            ButtonBinding(id: UUID(), button: .fourth, actions: [.mission(.missionControl, reverse: false)])
+        ]
+        store.settings = nonDefault
+        try store.save()
+
+        let fileURL = dir.appendingPathComponent("settings.json")
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: fileURL.path)
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: fileURL.path)
+        }
+
+        store.reload()
+
+        XCTAssertEqual(store.settings, .default)
+        XCTAssertEqual(store.lastLoadWarnings.count, 1)
+    }
 }
