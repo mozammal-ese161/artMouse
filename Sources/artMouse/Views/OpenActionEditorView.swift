@@ -3,7 +3,7 @@ import AppKit
 import ArtMouseCore
 
 struct OpenActionEditorView: View {
-    @State var target: OpenTarget
+    let target: OpenTarget
     let onChange: (Action?) -> Void
 
     var body: some View {
@@ -12,20 +12,19 @@ struct OpenActionEditorView: View {
             case .path(let p):
                 TextField("Path", text: Binding(
                     get: { p },
-                    set: { target = .path($0); onChange(.open(target)) }))
+                    set: { onChange(.open(.path($0))) }))
                     .frame(width: 220)
                 Button("Choose…") { chooseFile() }
             case .url(let u):
                 TextField("URL", text: Binding(
                     get: { u },
-                    set: { target = .url($0); onChange(.open(target)) }))
+                    set: { onChange(.open(.url($0))) }))
                     .frame(width: 220)
             }
             Picker("", selection: Binding(
                 get: { kind },
                 set: { newKind in
-                    target = newKind == .pathKind ? .path("") : .url("")
-                    onChange(.open(target))
+                    onChange(.open(newKind == .pathKind ? .path("") : .url("")))
                 })) {
                 Text("Path").tag(Kind.pathKind)
                 Text("URL").tag(Kind.urlKind)
@@ -46,8 +45,7 @@ struct OpenActionEditorView: View {
         panel.canChooseDirectories = true
         panel.canChooseFiles = true
         if panel.runModal() == .OK, let url = panel.url {
-            target = .path(url.path)
-            onChange(.open(target))
+            onChange(.open(.path(url.path)))
         }
     }
 }

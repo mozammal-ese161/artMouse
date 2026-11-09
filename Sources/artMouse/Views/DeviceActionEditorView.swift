@@ -2,11 +2,13 @@ import SwiftUI
 import ArtMouseCore
 
 struct DeviceActionEditorView: View {
-    @State var op: DeviceOp
+    let op: DeviceOp
     let onChange: (Action?) -> Void
 
     var body: some View {
-        Picker("", selection: Binding(get: { op }, set: { op = $0; onChange(.device($0)) })) {
+        Picker("", selection: Binding(
+            get: { op },
+            set: { onChange(.device($0)) })) {
             Text("Activate Next Cursor Speed").tag(DeviceOp.activateCursorSpeed(nil))
             Text("Switch Precision Mode").tag(DeviceOp.switchPrecisionMode)
             Text("DPI Cycle").tag(DeviceOp.dpiCycle).disabled(true)        // phase 4

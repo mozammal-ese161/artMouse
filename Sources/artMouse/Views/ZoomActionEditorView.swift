@@ -2,13 +2,15 @@ import SwiftUI
 import ArtMouseCore
 
 struct ZoomActionEditorView: View {
-    @State var op: ZoomOp
-    @State var reverse: Bool
+    let op: ZoomOp
+    let reverse: Bool
     let onChange: (Action?) -> Void
 
     var body: some View {
         HStack {
-            Picker("", selection: Binding(get: { op }, set: { op = $0; emit() })) {
+            Picker("", selection: Binding(
+                get: { op },
+                set: { onChange(.zoom($0, reverse: reverse)) })) {
                 Text("Screen Zoom In").tag(ZoomOp.screenZoomIn)
                 Text("Screen Zoom Out").tag(ZoomOp.screenZoomOut)
                 Text("App Zoom In").tag(ZoomOp.appZoomIn)
@@ -20,12 +22,10 @@ struct ZoomActionEditorView: View {
             .labelsHidden()
             .frame(width: 160)
 
-            Toggle("Reverse", isOn: Binding(get: { reverse }, set: { reverse = $0; emit() }))
+            Toggle("Reverse", isOn: Binding(
+                get: { reverse },
+                set: { onChange(.zoom(op, reverse: $0)) }))
                 .toggleStyle(.checkbox)
         }
-    }
-
-    private func emit() {
-        onChange(.zoom(op, reverse: reverse))
     }
 }

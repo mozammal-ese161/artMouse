@@ -2,15 +2,15 @@ import SwiftUI
 import ArtMouseCore
 
 struct MissionActionEditorView: View {
-    @State var op: MissionOp
-    @State var reverse: Bool
+    let op: MissionOp
+    let reverse: Bool
     let onChange: (Action?) -> Void
 
     var body: some View {
         HStack {
             Picker("", selection: Binding(
                 get: { op },
-                set: { op = $0; emit() })) {
+                set: { onChange(.mission($0, reverse: reverse)) })) {
                 Text("Mission Control").tag(MissionOp.missionControl)
                 Text("Application Windows").tag(MissionOp.appWindows)
                 Text("Launchpad").tag(MissionOp.launchpad)
@@ -29,7 +29,9 @@ struct MissionActionEditorView: View {
             .frame(width: 190)
 
             if isSpaceSwitch {
-                Toggle("Reverse", isOn: Binding(get: { reverse }, set: { reverse = $0; emit() }))
+                Toggle("Reverse", isOn: Binding(
+                    get: { reverse },
+                    set: { onChange(.mission(op, reverse: $0)) }))
                     .toggleStyle(.checkbox)
             }
         }
@@ -37,9 +39,5 @@ struct MissionActionEditorView: View {
 
     private var isSpaceSwitch: Bool {
         op == .moveSpaceLeft || op == .moveSpaceRight
-    }
-
-    private func emit() {
-        onChange(.mission(op, reverse: reverse))
     }
 }

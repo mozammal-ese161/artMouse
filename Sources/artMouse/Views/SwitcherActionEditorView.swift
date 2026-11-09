@@ -2,14 +2,14 @@ import SwiftUI
 import ArtMouseCore
 
 struct SwitcherActionEditorView: View {
-    @State var op: SwitcherOp
+    let op: SwitcherOp
     let onChange: (Action?) -> Void
 
     var body: some View {
         HStack {
             Picker("", selection: Binding(
                 get: { op },
-                set: { op = $0; emit() })) {
+                set: { onChange(.switcher($0)) })) {
                 Text("Next Application").tag(SwitcherOp.nextApp)
                 Text("Previous Application").tag(SwitcherOp.previousApp)
                 Text("Application Windows").tag(SwitcherOp.applicationWindows)
@@ -24,21 +24,17 @@ struct SwitcherActionEditorView: View {
                 case .bundleID(let id):
                     TextField("Bundle ID", text: Binding(
                         get: { id },
-                        set: { op = .app(.bundleID($0)); emit() }))
+                        set: { onChange(.switcher(.app(.bundleID($0)))) }))
                         .frame(width: 180)
                 case .url(let u):
                     TextField("URL", text: Binding(
                         get: { u },
-                        set: { op = .app(.url($0)); emit() }))
+                        set: { onChange(.switcher(.app(.url($0)))) }))
                         .frame(width: 180)
                 case .bookmark:
                     EmptyView()   // created via URL/bookmark picker in a later phase
                 }
             }
         }
-    }
-
-    private func emit() {
-        onChange(.switcher(op))
     }
 }

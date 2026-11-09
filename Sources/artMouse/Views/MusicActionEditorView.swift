@@ -2,13 +2,15 @@ import SwiftUI
 import ArtMouseCore
 
 struct MusicActionEditorView: View {
-    @State var op: MusicOp
-    @State var fineTune: Bool
+    let op: MusicOp
+    let fineTune: Bool
     let onChange: (Action?) -> Void
 
     var body: some View {
         HStack {
-            Picker("", selection: Binding(get: { op }, set: { op = $0; emit() })) {
+            Picker("", selection: Binding(
+                get: { op },
+                set: { onChange(.music($0, fineTune: fineTune)) })) {
                 Text("Play / Pause").tag(MusicOp.playPause)
                 Text("Next").tag(MusicOp.next)
                 Text("Previous").tag(MusicOp.previous)
@@ -20,12 +22,10 @@ struct MusicActionEditorView: View {
             .labelsHidden()
             .frame(width: 150)
 
-            Toggle("Fine-tune Volume", isOn: Binding(get: { fineTune }, set: { fineTune = $0; emit() }))
+            Toggle("Fine-tune Volume", isOn: Binding(
+                get: { fineTune },
+                set: { onChange(.music(op, fineTune: $0)) }))
                 .toggleStyle(.checkbox)
         }
-    }
-
-    private func emit() {
-        onChange(.music(op, fineTune: fineTune))
     }
 }
