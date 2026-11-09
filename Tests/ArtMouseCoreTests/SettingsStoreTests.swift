@@ -1,5 +1,6 @@
 import XCTest
 import Combine
+import Observation
 @testable import ArtMouseCore
 
 final class SettingsStoreTests: XCTestCase {
@@ -41,6 +42,28 @@ final class SettingsStoreTests: XCTestCase {
 
     func testDecodeThrowsOnGarbage() {
         XCTAssertThrowsError(try SettingsStore.decode(Data("nope".utf8)))
+    }
+
+    /// Task 16 fix round 1: the Settings UI reads `store.settings` through the
+    /// `@Observable` AppModel, so mutating the store must fire observation
+    /// callbacks — that is what re-renders the Buttons tab. Regression for the
+    /// retired ObservableObject version, whose writes no view could observe.
+    func testSettingsMutationIsObservable() throws {
+        let store = SettingsStore(directory: tempDirectory())
+        let observed = expectation(description: "settings change observed")
+        withObservationTracking {
+            _ = store.settings
+        } onChange: {
+            observed.fulfill()
+        }
+
+        var other = GlobalSettings.default
+        other.buttonBindings = [
+            ButtonBinding(id: UUID(), button: .middle, actions: [.mission(.missionControl, reverse: false)])
+        ]
+        store.settings = other
+
+        wait(for: [observed], timeout: 2.0)
     }
 
     func testUnreadableFileFallsBackToDefaultsWithWarning() throws {

@@ -1,15 +1,18 @@
 import Foundation
-import Combine
+import Observation
 
 /// Loads/saves settings.json in the given directory. A malformed or missing
 /// file yields defaults plus a warning (spec §7) — never a crash.
-public final class SettingsStore: ObservableObject {
+/// Observable (Task 16 fix round 1): the Settings UI reads `settings` through
+/// the `@Observable` AppModel, so mutations must invalidate observers directly.
+/// Nothing consumed the previous Combine publishers, and the engine reads the
+/// store synchronously, so `ObservableObject`/`@Published` were retired.
+@Observable
+public final class SettingsStore {
     static let settingsFileName = "settings.json"
 
-    @Published public private(set) var lastLoadWarnings: [String] = []
-    @Published public var settings: GlobalSettings {
-        didSet { objectWillChange.send() }
-    }
+    public private(set) var lastLoadWarnings: [String] = []
+    public var settings: GlobalSettings
 
     private let fileURL: URL
     private let encoder: JSONEncoder
