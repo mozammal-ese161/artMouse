@@ -21,8 +21,10 @@ public final class EventRouter: EventRouting {
     private let executor: ActionExecuting
     private let clickLock: ClickLockCoordinating
     private let cursor: CursorControlling
-    /// Buttons currently held that were activated with hold actions.
-    private var heldButtons: Set<ButtonID> = []
+    /// Buttons currently held, mapped to the hold action that began them.
+    /// Keyed independently of the current bindings so a mid-hold unbind
+    /// (live settings) still delivers endedHold on button-up.
+    private var heldButtons: [ButtonID: Action] = [:]
 
     public init(settings: SettingsStore, executor: ActionExecuting,
                 clickLock: ClickLockCoordinating, cursor: CursorControlling) {
@@ -57,8 +59,8 @@ public final class EventRouter: EventRouting {
         }
 
         for action in binding.actions where action.isHoldAction {
+            heldButtons[button] = action
             executor.beganHold(action)
-            heldButtons.insert(button)
             return .consume
         }
         for action in binding.actions {
@@ -68,6 +70,13 @@ public final class EventRouter: EventRouting {
     }
 
     private func handleUp(_ button: ButtonID) -> RouterOutcome {
+        // Checked before the binding guard: bindings are live, and a button
+        // unbound mid-hold must still end its hold.
+        if let action = heldButtons.removeValue(forKey: button) {
+            executor.endedHold(action)
+            return .consume
+        }
+
         guard let binding = binding(for: button) else { return .passThrough }
 
         if binding.actions.contains(where: { $0.isClickLock }) {
@@ -75,13 +84,6 @@ public final class EventRouter: EventRouting {
             return .consume   // coordinator decides posting (Task 9)
         }
 
-        if heldButtons.contains(button) {
-            heldButtons.remove(button)
-            for action in binding.actions where action.isHoldAction {
-                executor.endedHold(action)
-            }
-            return .consume
-        }
         return .consume
     }
 }

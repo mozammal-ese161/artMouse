@@ -60,6 +60,41 @@ final class EventRouterTests: XCTestCase {
         XCTAssertEqual(router.handle(.buttonDown(.extended(11))), .passThrough)
         XCTAssertEqual(router.handle(.buttonUp(.extended(11))), .passThrough)
     }
+
+    func testClickLockDownDelegatesToCoordinator() {
+        let executor = RecordingExecutor()
+        var settings = GlobalSettings.default
+        settings.buttonBindings = [ButtonBinding(button: .fourth, actions: [.click(.clickLock, [])])]
+        let clickLock = StubClickLock()
+        let router = EventRouter(settings: store(settings), executor: executor,
+                                 clickLock: clickLock, cursor: StubCursor())
+        XCTAssertEqual(router.handle(.buttonDown(.fourth)), .consume)
+        XCTAssertEqual(clickLock.swallowDownChecked, [.fourth])
+        XCTAssertEqual(clickLock.downCalls.map(\.button), [.fourth])
+        XCTAssertTrue(executor.performed.isEmpty)
+    }
+
+    func testClickLockUpDelegatesToCoordinator() {
+        var settings = GlobalSettings.default
+        settings.buttonBindings = [ButtonBinding(button: .fourth, actions: [.click(.clickLock, [])])]
+        let clickLock = StubClickLock()
+        let router = EventRouter(settings: store(settings), executor: RecordingExecutor(),
+                                 clickLock: clickLock, cursor: StubCursor())
+        XCTAssertEqual(router.handle(.buttonUp(.fourth)), .consume)
+        XCTAssertEqual(clickLock.upCalls.map(\.button), [.fourth])
+    }
+
+    func testClickLockDownWhileLockedSwallowsWithoutNotingDown() {
+        var settings = GlobalSettings.default
+        settings.buttonBindings = [ButtonBinding(button: .fourth, actions: [.click(.clickLock, [])])]
+        let clickLock = StubClickLock()
+        clickLock.swallowDownResult = true
+        let router = EventRouter(settings: store(settings), executor: RecordingExecutor(),
+                                 clickLock: clickLock, cursor: StubCursor())
+        XCTAssertEqual(router.handle(.buttonDown(.fourth)), .consume)
+        XCTAssertEqual(clickLock.swallowDownChecked, [.fourth])
+        XCTAssertTrue(clickLock.downCalls.isEmpty)
+    }
 }
 
 final class RecordingExecutor: ActionExecuting {
@@ -72,10 +107,23 @@ final class RecordingExecutor: ActionExecuting {
 }
 
 final class StubClickLock: ClickLockCoordinating {
-    func noteDown(_ button: ButtonID, now: Double) {}
-    func noteUp(_ button: ButtonID, now: Double) -> Bool { false }
+    private(set) var swallowDownChecked: [ButtonID] = []
+    private(set) var downCalls: [(button: ButtonID, now: Double)] = []
+    private(set) var upCalls: [(button: ButtonID, now: Double)] = []
+    var swallowDownResult = false
+    var upSwallowResult = false
+    func shouldSwallowDown(_ button: ButtonID) -> Bool {
+        swallowDownChecked.append(button)
+        return swallowDownResult
+    }
+    func noteDown(_ button: ButtonID, now: Double) {
+        downCalls.append((button, now))
+    }
+    func noteUp(_ button: ButtonID, now: Double) -> Bool {
+        upCalls.append((button, now))
+        return upSwallowResult
+    }
     func isLocked(_ button: ButtonID) -> Bool { false }
-    func shouldSwallowDown(_ button: ButtonID) -> Bool { false }
 }
 
 final class StubCursor: CursorControlling {
