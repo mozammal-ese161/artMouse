@@ -1,12 +1,15 @@
 import AppKit
+import SwiftUI
 import ArtMouseCore
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var permissions: PermissionsController?
     private var bootstrap: EngineBootstrap?
-    private var store: SettingsStore?           // shared with AppModel in Task 16
+    private var store: SettingsStore?
     private var devices: DeviceManager?
+    private var appModel: AppModel?
+    private var settingsWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let menu = NSMenu()
@@ -25,15 +28,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let permissions = PermissionsController()
         self.permissions = permissions
+
+        // Store and devices exist in safe mode too, so the Settings UI (Task 16)
+        // shares the same instances on both paths. The bootstrap block below
+        // gates only the engine itself.
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let directory = appSupport.appendingPathComponent("artMouse", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let store = SettingsStore(directory: directory)
+        let devices = DeviceManager(enumerator: IOKitDeviceEnumerator())
+        self.store = store
+        self.devices = devices
+        appModel = AppModel(store: store, permissions: permissions, devices: devices)
+
         if BootstrapDecision.shouldRunEngine(arguments: CommandLine.arguments,
                                              flagsAtLaunch: BootstrapDecision.currentFlags()) {
-            let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            let directory = appSupport.appendingPathComponent("artMouse", isDirectory: true)
-            try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            let store = SettingsStore(directory: directory)
-            let devices = DeviceManager(enumerator: IOKitDeviceEnumerator())
-            self.store = store
-            self.devices = devices
             let bootstrap = EngineBootstrap(devices: devices, permissions: permissions)
             bootstrap.start(store: store)
             self.bootstrap = bootstrap
@@ -41,14 +50,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func openSettings() {
+        guard let appModel else { return }
         NSApp.activate(ignoringOtherApps: true)
-        // Settings window arrives in Task 16; placeholder opens an empty window.
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 640, height: 480),
-            styleMask: [.titled, .closable],
-            backing: .buffered, defer: false)
-        window.title = "artMouse Settings"
-        window.makeKeyAndOrderFront(nil)
+        if settingsWindow == nil {
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 720, height: 520),
+                                  styleMask: [.titled, .closable, .miniaturizable],
+                                  backing: .buffered, defer: false)
+            window.title = "artMouse Settings"
+            window.contentView = NSHostingView(rootView: SettingsWindow(model: appModel))
+            settingsWindow = window
+        }
+        settingsWindow?.makeKeyAndOrderFront(nil)
     }
 
     @objc func quit() { NSApp.terminate(nil) }

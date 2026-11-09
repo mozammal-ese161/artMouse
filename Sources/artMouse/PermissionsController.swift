@@ -5,6 +5,9 @@ enum PermissionState: Equatable {
     case granted, denied
 }
 
+/// Main-thread confined: observed directly by the Settings UI, so the
+/// main-thread discipline the engine already follows is compiler-enforced.
+@MainActor
 final class PermissionsController: ObservableObject {
     @Published var accessibility: PermissionState = .denied
     @Published var inputMonitoring: PermissionState = .denied

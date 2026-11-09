@@ -1,9 +1,17 @@
 import AppKit
-import ArtMouseCore
+// SDK adaptation: the @MainActor annotation (Task 16 carried requirement) makes
+// the Timer closures below cross a @Sendable boundary while carrying
+// non-Sendable ArtMouseCore types. Every capture still lives and fires on the
+// main run loop, so the pre-concurrency API assumption is safe here.
+@preconcurrency import ArtMouseCore
 import Combine
 
 /// Assembles the engine stack and owns its timers. The SettingsStore and
 /// DeviceManager are created by AppDelegate and shared with the UI (Task 16).
+/// Main-thread confined: start() must only ever be called from the main queue
+/// (see the calling discipline below), and PermissionsController is
+/// @MainActor since Task 16's UI observes it.
+@MainActor
 final class EngineBootstrap {
     private let permissions: PermissionsController
     private let devices: DeviceManager
