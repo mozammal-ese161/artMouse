@@ -96,6 +96,112 @@ public final class ActionExecutor: ActionExecuting {
     }
 
     private func performAction(_ action: Action) {
-        // Task 10 fills mission/music/zoom/switcher/open dispatch.
+        switch action {
+        case .mission(let op, let reverse):
+            performMission(op, reverse: reverse)
+        case .music(let op, _):
+            performMusic(op)
+        case .zoom(let op, let reverse):
+            performZoom(op, reverse: reverse)
+        case .switcher(let op):
+            performSwitcher(op)
+        case .open(let target):
+            performOpen(target)
+        default:
+            break   // device ops (Task 13), deferred ops no-op
+        }
+    }
+
+    /// Down + up pair with the given modifier flags (mission, zoom, app switcher).
+    // SDK adaptation: the keyboard CGEvent initializer takes no flags argument;
+    // the flags are assigned to each event before it is posted.
+    private func keyPress(_ keyCode: UInt64, flags: CGEventFlags) {
+        let down = CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(keyCode), keyDown: true)!
+        down.flags = flags
+        poster.post(down)
+        let up = CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(keyCode), keyDown: false)!
+        up.flags = flags
+        poster.post(up)
+    }
+
+    private func performMission(_ op: MissionOp, reverse: Bool) {
+        let ctrl: CGEventFlags = [.maskControl]
+        switch op {
+        case .missionControl: keyPress(KeyCodes.upArrow, flags: ctrl)
+        case .appWindows: keyPress(KeyCodes.downArrow, flags: ctrl)
+        case .launchpad: keyPress(KeyCodes.f4, flags: [])
+        case .showDesktop: keyPress(KeyCodes.f11, flags: [])
+        case .desktop(let n): keyPress(KeyCodes.digit(n), flags: ctrl)
+        case .moveSpaceLeft: keyPress(reverse ? KeyCodes.rightArrow : KeyCodes.leftArrow, flags: ctrl)
+        case .moveSpaceRight: keyPress(reverse ? KeyCodes.leftArrow : KeyCodes.rightArrow, flags: ctrl)
+        case .spotlight: keyPress(KeyCodes.space, flags: [.maskCommand])
+        case .fullscreenButton: keyPress(KeyCodes.f, flags: [.maskControl, .maskCommand])
+        case .notificationCenter, .siri:
+            break   // deferred (phase 4); UI disables
+        }
+    }
+
+    private func performMusic(_ op: MusicOp) {
+        let keyCode: Int64
+        switch op {
+        case .playPause: keyCode = NXMediaKey.play
+        case .next: keyCode = NXMediaKey.fast
+        case .previous: keyCode = NXMediaKey.rewind
+        case .mute: keyCode = NXMediaKey.mute
+        case .volumeUp: keyCode = NXMediaKey.soundUp
+        case .volumeDown: keyCode = NXMediaKey.soundDown
+        case .eject: keyCode = NXMediaKey.eject
+        }
+        poster.post(MediaKeySynthesizer.makeEvent(keyCode: keyCode, keyDown: true))
+        poster.post(MediaKeySynthesizer.makeEvent(keyCode: keyCode, keyDown: false))
+    }
+
+    private func performZoom(_ op: ZoomOp, reverse: Bool) {
+        switch op {
+        case .appZoomIn, .appZoomOut:
+            let zoomIn = (op == .appZoomIn) != reverse
+            keyPress(zoomIn ? KeyCodes.equals : KeyCodes.minus, flags: [.maskCommand])
+        case .screenZoomIn, .screenZoomOut:
+            let zoomIn = (op == .screenZoomIn) != reverse
+            keyPress(zoomIn ? KeyCodes.equals : KeyCodes.minus, flags: [.maskAlternate, .maskCommand])
+        case .pinchIn, .pinchOut, .smartZoom:
+            break   // deferred gesture emulation (phase 4); UI disables
+        }
+    }
+
+    private func performSwitcher(_ op: SwitcherOp) {
+        switch op {
+        case .nextApp: keyPress(48, flags: [.maskCommand])
+        case .previousApp: keyPress(48, flags: [.maskCommand, .maskShift])
+        case .applicationWindows: keyPress(KeyCodes.downArrow, flags: [.maskControl])
+        case .showSwitcher: break   // deferred custom overlay (phase 4)
+        case .app(let target):
+            switch target {
+            case .bundleID(let id): workspace.launchApp(bundleID: id)
+            case .url(let string): openURLIfValid(string)
+            case .bookmark(let base64):
+                guard let data = Data(base64Encoded: base64) else { return }
+                var isStale = false
+                if let url = try? URL(resolvingBookmarkData: data, options: [],
+                                      relativeTo: nil, bookmarkDataIsStale: &isStale) {
+                    workspace.openURL(url)
+                }
+            }
+        }
+    }
+
+    private func performOpen(_ target: OpenTarget) {
+        switch target {
+        case .path(let p): workspace.openFile(path: p)
+        case .url(let string): openURLIfValid(string)
+        }
+    }
+
+    /// Opens a URL target, treating an unparseable string as a no-op rather than a crash.
+    // SDK adaptation: macOS 14 Foundation's URL(string:) accepts garbage such as
+    // "::::not-a-url" with an empty scheme, so a non-empty scheme is required before opening.
+    private func openURLIfValid(_ string: String) {
+        guard let url = URL(string: string), let scheme = url.scheme, !scheme.isEmpty else { return }
+        workspace.openURL(url)
     }
 }
