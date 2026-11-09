@@ -10,6 +10,7 @@ struct SettingsWindow: View {
     var body: some View {
         VStack(spacing: 0) {
             PermissionBannerView(permissions: model.permissions)
+            WarningsBannerView(warnings: model.lastLoadWarnings)
             TabView {
                 ButtonsTabView(model: model)
                     .tabItem { Text("Buttons") }

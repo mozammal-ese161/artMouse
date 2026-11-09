@@ -16,6 +16,10 @@ final class AppModel {
 
     var settings: GlobalSettings { store.settings }
 
+    /// Load warnings from the store; surfaced in the Settings UI so a
+    /// malformed settings.json is visible to the user (spec §7, Review Focus 2).
+    var lastLoadWarnings: [String] { store.lastLoadWarnings }
+
     func binding(for button: ButtonID) -> ButtonBinding? {
         store.settings.buttonBindings.first { $0.button == button }
     }
