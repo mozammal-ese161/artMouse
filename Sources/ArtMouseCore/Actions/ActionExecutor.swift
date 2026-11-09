@@ -20,12 +20,17 @@ public final class ActionExecutor: ActionExecuting {
     private let poster: EventPosting
     private let workspace: WorkspaceOpening
     private let cursorLocation: () -> CGPoint
+    /// Weak: the executor lives in the router graph alongside its cursor controller,
+    /// so a strong reference here would be a cycle (Task 13).
+    private weak var cursor: CursorCoordinating?
 
     public init(poster: EventPosting,
                 workspace: WorkspaceOpening = NSWorkspaceOpener(),
+                cursor: CursorCoordinating? = nil,
                 cursorLocation: @escaping () -> CGPoint = { CGEvent(source: nil)?.location ?? .zero }) {
         self.poster = poster
         self.workspace = workspace
+        self.cursor = cursor
         self.cursorLocation = cursorLocation
     }
 
@@ -40,8 +45,13 @@ public final class ActionExecutor: ActionExecuting {
         }
     }
 
-    public func beganHold(_ action: Action) { performAction(action) }   // precision-mode begin, Task 13
-    public func endedHold(_ action: Action) {}                          // precision-mode end, Task 13
+    public func beganHold(_ action: Action) {
+        if case .device(.switchPrecisionMode) = action { cursor?.beginPrecision() }
+    }
+
+    public func endedHold(_ action: Action) {
+        if case .device(.switchPrecisionMode) = action { cursor?.endPrecision() }
+    }
 
     /// Used by ClickLockCoordinator to post lock-phase button events.
     public func postButton(_ id: ButtonID, down: Bool, mods: ModKeys) {
@@ -107,8 +117,21 @@ public final class ActionExecutor: ActionExecuting {
             performSwitcher(op)
         case .open(let target):
             performOpen(target)
+        case .device(let op):
+            performDevice(op)
         default:
-            break   // device ops (Task 13), deferred ops no-op
+            break   // .none/.click are dispatched in perform(_:); deferred ops no-op
+        }
+    }
+
+    private func performDevice(_ op: DeviceOp) {
+        switch op {
+        case .activateCursorSpeed:
+            cursor?.activateNext(source: .buttonAction)
+        case .switchPrecisionMode:
+            break   // hold lifecycle, not a tap action
+        case .dpiCycle, .dpiUp, .dpiDown, .dpiShift, .defaultDPI, .switchWheelMode:
+            break   // DPI/wheel ops deferred (phases 2/4); UI disables
         }
     }
 

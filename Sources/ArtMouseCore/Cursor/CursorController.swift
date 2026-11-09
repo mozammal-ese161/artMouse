@@ -5,9 +5,17 @@ public enum ProfileSwitchSource: Equatable {
     case buttonAction
 }
 
+/// Cursor operations the executor forwards button-assigned device ops to
+/// (Task 13); kept separate from the router's `CursorControlling` transform API.
+public protocol CursorCoordinating: AnyObject {
+    func activateNext(source: ProfileSwitchSource)
+    func beginPrecision()
+    func endPrecision()
+}
+
 /// Resolves cursor speed profiles into event transforms; owns profile
 /// switching, precision hold, and the 5 s safety restore (spec §7).
-public final class CursorController: CursorControlling {
+public final class CursorController: CursorControlling, CursorCoordinating {
     static let safetyRestoreDelay: Double = 5.0
     static let restoreWarningText = "Cursor speed was switched by a button. Restoring the previous speed in 5 seconds."
 
