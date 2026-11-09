@@ -34,4 +34,42 @@ final class AppModel {
     func save() {
         try? store.save()
     }
+
+    func addProfile() {
+        var settings = store.settings
+        settings.cursorSpeedProfiles.append(
+            CursorSpeedProfile(name: "Profile \(settings.cursorSpeedProfiles.count + 1)",
+                               sensitivity: 1600, acceleration: 1.0))
+        store.settings = settings
+        save()
+    }
+
+    func removeProfile(_ id: UUID) {
+        var settings = store.settings
+        guard settings.cursorSpeedProfiles.count > 1 else { return }   // never zero profiles
+        settings.cursorSpeedProfiles.removeAll { $0.id == id }
+        if settings.activeCursorSpeedProfileID == id { settings.activeCursorSpeedProfileID = nil }
+        if settings.precisionProfileID == id { settings.precisionProfileID = nil }
+        store.settings = settings
+        save()
+    }
+
+    func updateProfile(_ profile: CursorSpeedProfile) {
+        var settings = store.settings
+        if let index = settings.cursorSpeedProfiles.firstIndex(where: { $0.id == profile.id }) {
+            settings.cursorSpeedProfiles[index] = profile
+        }
+        store.settings = settings
+        save()
+    }
+
+    func setActiveProfile(_ id: UUID) {
+        store.settings.activeCursorSpeedProfileID = id
+        save()
+    }
+
+    func setPrecisionProfile(_ id: UUID?) {
+        store.settings.precisionProfileID = id
+        save()
+    }
 }
