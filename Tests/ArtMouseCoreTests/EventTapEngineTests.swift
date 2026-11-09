@@ -79,6 +79,48 @@ final class EventTapEngineTests: XCTestCase {
         engine.stop()
         XCTAssertFalse(engine.tapActive)
     }
+
+    func testSelfPostedEventsBypassRouting() {
+        let tap = MockTap()
+        let router = RecordingRouter()
+        let engine = EventTapEngine(router: router, tapFactory: MockTapFactory(tap: tap),
+                                    isSelfPosted: { _ in true })
+        XCTAssertTrue(engine.start())
+        let event = CGEvent(source: nil)!
+        XCTAssertTrue(tap.emit(event, type: .leftMouseDown) === event)
+        XCTAssertTrue(router.received.isEmpty)
+    }
+
+    func testNonSelfPostedEventsStillRoute() {
+        let tap = MockTap()
+        let router = RecordingRouter()
+        let engine = EventTapEngine(router: router, tapFactory: MockTapFactory(tap: tap),
+                                    isSelfPosted: { _ in false })
+        XCTAssertTrue(engine.start())
+        tap.emit(CGEvent(source: nil)!, type: .leftMouseDown)
+        XCTAssertEqual(router.received.count, 1)
+    }
+
+    // $tapActive re-publishes on every assignment, so without the
+    // unchanged-value guard in syncTapActive ordinary traffic would emit.
+    func testSyncTapActiveDoesNotEmitWhenUnchanged() {
+        let tap = MockTap()
+        let engine = EventTapEngine(router: PassThroughRouter(), tapFactory: MockTapFactory(tap: tap))
+        XCTAssertTrue(engine.start())
+        var received: [Bool] = []
+        let cancellable = engine.tapActivePublisher.sink { received.append($0) }
+        let baseline = received.count
+        tap.emit(CGEvent(source: nil)!, type: .leftMouseDown)
+        tap.emit(CGEvent(source: nil)!, type: .mouseMoved)
+        XCTAssertEqual(received.count, baseline)
+        XCTAssertEqual(received.last, true)
+        // A real flip must still publish.
+        tap.disable()
+        tap.refusesEnable = true
+        tap.emit(CGEvent(source: nil)!, type: .tapDisabledByTimeout)
+        XCTAssertEqual(received.last, false)
+        _ = cancellable
+    }
 }
 
 // Test doubles + fixture routers
@@ -94,6 +136,10 @@ struct ScalingRouter: EventRouting {
         if case .moved = event { return .cursorTransform(dxFactor: factor, dyFactor: factor) }
         return .passThrough
     }
+}
+final class RecordingRouter: EventRouting {
+    private(set) var received: [InputEvent] = []
+    func handle(_ event: InputEvent) -> RouterOutcome { received.append(event); return .passThrough }
 }
 final class MockTap: EventTapHandle {
     private(set) var isEnabled = true

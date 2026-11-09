@@ -27,7 +27,14 @@ final class AppModel {
     func setBinding(_ button: ButtonID, action: Action?) {
         var settings = store.settings
         if let index = settings.buttonBindings.firstIndex(where: { $0.button == button }) {
-            settings.buttonBindings[index].actions = action.map { [$0] } ?? []
+            if let action {
+                settings.buttonBindings[index].actions = [action]
+            } else {
+                // Unbind removes the whole binding: an empty binding left
+                // behind would match the router forever and swallow both
+                // press and release of a button the UI reports as Unbound.
+                settings.buttonBindings.remove(at: index)
+            }
         } else if let action {
             settings.buttonBindings.append(ButtonBinding(button: button, actions: [action]))
         }

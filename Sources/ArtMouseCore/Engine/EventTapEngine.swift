@@ -14,6 +14,7 @@ public final class EventTapEngine {
     private let router: EventRouting
     private let tapFactory: EventTapCreating
     private let notificationCenter: NotificationCenter
+    private let isSelfPosted: (CGEvent) -> Bool
     private var tap: EventTapHandle?
     private var wakeObserver: NSObjectProtocol?
 
@@ -42,10 +43,12 @@ public final class EventTapEngine {
         | (1 << CGEventType.scrollWheel.rawValue)
 
     public init(router: EventRouting, tapFactory: EventTapCreating,
-                workspaceNotificationCenter: NotificationCenter = NSWorkspace.shared.notificationCenter) {
+                workspaceNotificationCenter: NotificationCenter = NSWorkspace.shared.notificationCenter,
+                isSelfPosted: @escaping (CGEvent) -> Bool = { _ in false }) {
         self.router = router
         self.tapFactory = tapFactory
         self.notificationCenter = workspaceNotificationCenter
+        self.isSelfPosted = isSelfPosted
     }
 
     /// Returns false when the tap could not be created (missing permission).
@@ -83,12 +86,11 @@ public final class EventTapEngine {
     /// Mirrors the tap's real enabled state into `tapActive`. After a disabled
     /// event this reports whether the re-enable took; on ordinary events it
     /// marks recovery the moment traffic flows through a live tap again.
+    /// The write is guarded: @Published re-publishes on every assignment, and
+    /// this runs on every event, so an unchanged value must not emit.
     private func syncTapActive() {
-        guard let tap = tap else {
-            tapActive = false
-            return
-        }
-        tapActive = tap.isEnabled
+        let active = tap?.isEnabled ?? false
+        if tapActive != active { tapActive = active }
     }
 
     func process(event: CGEvent, type: CGEventType) -> CGEvent? {
@@ -98,6 +100,11 @@ public final class EventTapEngine {
             return event
         }
         syncTapActive()
+        // Loop protection: the app's own synthetic events (button remaps,
+        // click-lock replay) must reach the system but never be routed again —
+        // routing them would re-trigger the binding that posted them, looping
+        // unbounded. Pass the event through unchanged (no consume, no transform).
+        if isSelfPosted(event) { return event }
         let input = CGEventTranslation.inputEvent(from: type, event)
         switch router.handle(input) {
         case .passThrough:

@@ -25,6 +25,11 @@ public final class EventRouter: EventRouting {
     /// Keyed independently of the current bindings so a mid-hold unbind
     /// (live settings) still delivers endedHold on button-up.
     private var heldButtons: [ButtonID: Action] = [:]
+    /// Buttons whose press started a click-lock interaction, recorded from the
+    /// bindings at down time. Mirrors `heldButtons`: tracked independently of
+    /// the current bindings so a mid-press unbind/rebind still delivers noteUp
+    /// on button-up instead of stranding the coordinator in sticky-down.
+    private var clickLockButtons: Set<ButtonID> = []
 
     public init(settings: SettingsStore, executor: ActionExecuting,
                 clickLock: ClickLockCoordinating, cursor: CursorControlling) {
@@ -45,8 +50,12 @@ public final class EventRouter: EventRouting {
         }
     }
 
+    /// A matched binding with no actions behaves like no binding at all: both
+    /// directions pass through with stock behavior. This is the defensive half
+    /// of the unbind fix (AppModel removes the binding outright; an empty
+    /// binding that survives elsewhere must never swallow a dead button).
     private func binding(for button: ButtonID) -> ButtonBinding? {
-        settings.settings.buttonBindings.first { $0.button == button }
+        settings.settings.buttonBindings.first { $0.button == button && !$0.actions.isEmpty }
     }
 
     private func handleDown(_ button: ButtonID) -> RouterOutcome {
@@ -54,6 +63,7 @@ public final class EventRouter: EventRouting {
 
         if binding.actions.contains(where: { $0.isClickLock }) {
             if clickLock.shouldSwallowDown(button) { return .consume }   // releasing a lock
+            clickLockButtons.insert(button)
             clickLock.noteDown(button, now: Date().timeIntervalSince1970)
             return .consume
         }
@@ -75,6 +85,15 @@ public final class EventRouter: EventRouting {
         if let action = heldButtons.removeValue(forKey: button) {
             executor.endedHold(action)
             return .consume
+        }
+
+        // Checked before the binding guard too: click-lock membership is
+        // recorded at down time, so a press whose binding was unbound or
+        // rebound mid-press still releases the coordinator's sticky state.
+        if clickLockButtons.contains(button) {
+            clickLockButtons.remove(button)
+            _ = clickLock.noteUp(button, now: Date().timeIntervalSince1970)
+            return .consume   // coordinator decides posting (Task 9)
         }
 
         guard let binding = binding(for: button) else { return .passThrough }

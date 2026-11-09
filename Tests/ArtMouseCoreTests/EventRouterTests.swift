@@ -111,6 +111,38 @@ final class EventRouterTests: XCTestCase {
         XCTAssertEqual(clickLock.swallowDownChecked, [.fourth])
         XCTAssertTrue(clickLock.downCalls.isEmpty)
     }
+
+    // A zombie binding (present with no actions) must behave like an unbound
+    // button: both directions pass through and the executor stays untouched.
+    func testEmptyActionsBindingPassesThrough() {
+        let executor = RecordingExecutor()
+        var settings = GlobalSettings.default
+        settings.buttonBindings = [ButtonBinding(button: .fourth, actions: [])]
+        let router = EventRouter(settings: store(settings), executor: executor,
+                                 clickLock: StubClickLock(), cursor: StubCursor())
+        XCTAssertEqual(router.handle(.buttonDown(.fourth)), .passThrough)
+        XCTAssertEqual(router.handle(.buttonUp(.fourth)), .passThrough)
+        XCTAssertTrue(executor.performed.isEmpty)
+        XCTAssertTrue(executor.postedButtons.isEmpty)
+    }
+
+    // Click-lock state is tracked at down time, so an unbind (live settings)
+    // mid-press must still notify the coordinator on button-up.
+    func testClickLockUpAfterUnbindStillNotifies() {
+        var settings = GlobalSettings.default
+        settings.buttonBindings = [ButtonBinding(button: .middle, actions: [.click(.clickLock, [])])]
+        let settingsStore = store(settings)
+        let clickLock = StubClickLock()
+        let router = EventRouter(settings: settingsStore, executor: RecordingExecutor(),
+                                 clickLock: clickLock, cursor: StubCursor())
+        XCTAssertEqual(router.handle(.buttonDown(.middle)), .consume)
+        XCTAssertEqual(clickLock.downCalls.map(\.button), [.middle])
+
+        settingsStore.settings = .default   // binding removed while pressed
+
+        XCTAssertEqual(router.handle(.buttonUp(.middle)), .consume)
+        XCTAssertEqual(clickLock.upCalls.map(\.button), [.middle])
+    }
 }
 
 final class RecordingExecutor: ActionExecuting {

@@ -72,6 +72,22 @@ final class ActionExecutorTests: XCTestCase {
         XCTAssertEqual(poster.events[1].type, .rightMouseUp)
     }
 
+    // SDK adaptation: CGEventGetSource is not exposed to Swift; sources are
+    // read back from an event with CGEventSource(event:) (CGEventCreateSourceFromEvent).
+    // No event is actually posted here — tag() is the exact tagging post()
+    // performs, invoked directly so the test injects no real HID events.
+    func testPosterTagsOwnEventsAndOwnsDetectsThem() {
+        let poster = CGEventPoster()
+        let click = CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown,
+                            mouseCursorPosition: .zero, mouseButton: .left)!
+        poster.tag(click)
+        XCTAssertTrue(poster.owns(click))
+        let key = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: true)!
+        poster.tag(key)
+        XCTAssertTrue(poster.owns(key))
+        XCTAssertFalse(poster.owns(CGEvent(source: nil)!))
+    }
+
     func testKeyCodesANSIValues() {
         XCTAssertEqual(KeyCodes.digit(1), 18)
         XCTAssertEqual(KeyCodes.digit(5), 23)

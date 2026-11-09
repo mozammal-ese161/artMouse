@@ -57,7 +57,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                   styleMask: [.titled, .closable, .miniaturizable],
                                   backing: .buffered, defer: false)
             window.title = "artMouse Settings"
-            window.contentView = NSHostingView(rootView: SettingsWindow(model: appModel))
+            window.contentView = NSHostingView(rootView: SettingsWindow(model: appModel, safetyBootstrap: bootstrap))
             settingsWindow = window
         }
         settingsWindow?.makeKeyAndOrderFront(nil)

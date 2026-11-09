@@ -11,6 +11,7 @@ import Combine
 /// Main-thread confined: start() must only ever be called from the main queue
 /// (see the calling discipline below), and PermissionsController is
 /// @MainActor since Task 16's UI observes it.
+@Observable
 @MainActor
 final class EngineBootstrap {
     private let permissions: PermissionsController
@@ -22,6 +23,12 @@ final class EngineBootstrap {
     private var appWatcher: AppWatcher?
     private var cancellable: AnyCancellable?
 
+    /// Safety-restore warning mirrored from the cursor controller on every
+    /// tick, so the Settings window renders it with @Observable tracking
+    /// (spec §7 requires a visible warning; it previously lived only on the
+    /// controller where nothing read it).
+    public private(set) var safetyRestoreWarning: String?
+
     init(devices: DeviceManager, permissions: PermissionsController) {
         self.permissions = permissions
         self.devices = devices
@@ -31,11 +38,16 @@ final class EngineBootstrap {
         let cursorController = CursorController(store: store)
         self.cursor = cursorController
 
-        let executor = ActionExecutor(poster: CGEventPoster(), cursor: cursorController)
+        // One poster shared by the executor (and the click-lock coordinator
+        // behind it), so every synthetic event carries the same private-source
+        // tag the engine tap uses to skip self-posted events (loop protection).
+        let poster = CGEventPoster()
+        let executor = ActionExecutor(poster: poster, cursor: cursorController)
         let clickLock = ClickLockCoordinator(executor: executor)
         let router = EventRouter(settings: store, executor: executor,
                                  clickLock: clickLock, cursor: cursorController)
-        let tapEngine = EventTapEngine(router: router, tapFactory: CGEventTapFactory())
+        let tapEngine = EventTapEngine(router: router, tapFactory: CGEventTapFactory(),
+                                       isSelfPosted: { poster.owns($0) })
         self.engine = tapEngine
 
         let started = tapEngine.start()
@@ -68,8 +80,14 @@ final class EngineBootstrap {
         // menu is tracked or a drag is in progress — the tap's own run-loop
         // source lives in .commonModes, so cursor ticks and device refreshes
         // must not pause while tap callbacks keep flowing.
-        let tick = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak cursorController] _ in
+        let tick = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self, weak cursorController] _ in
             cursorController?.tick()
+            // SDK adaptation: Timer closures are @Sendable while this class is
+            // @MainActor. The timer is scheduled on the main run loop (calling
+            // discipline above), so the mirrored write is main-actor isolated.
+            MainActor.assumeIsolated {
+                self?.safetyRestoreWarning = cursorController?.safetyRestoreWarning
+            }
         }
         RunLoop.main.add(tick, forMode: .common)
         tickTimer = tick
