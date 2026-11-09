@@ -54,6 +54,24 @@ final class ActionExecutorTests: XCTestCase {
         XCTAssertTrue(poster.events.isEmpty)
     }
 
+    func testClickCarriesCurrentCursorPosition() {
+        let poster = RecordingPoster()
+        let executor = ActionExecutor(poster: poster, cursorLocation: { CGPoint(x: 123, y: 456) })
+        executor.perform(.click(.left, []))
+        XCTAssertEqual(poster.events.count, 2)
+        XCTAssertEqual(poster.events[0].location, CGPoint(x: 123, y: 456))
+        XCTAssertEqual(poster.events[1].location, CGPoint(x: 123, y: 456))
+    }
+
+    func testRightClickPostsRightMouseDownThenUp() {
+        let poster = RecordingPoster()
+        let executor = ActionExecutor(poster: poster)
+        executor.perform(.click(.right, []))
+        XCTAssertEqual(poster.events.count, 2)
+        XCTAssertEqual(poster.events[0].type, .rightMouseDown)
+        XCTAssertEqual(poster.events[1].type, .rightMouseUp)
+    }
+
     func testKeyCodesANSIValues() {
         XCTAssertEqual(KeyCodes.digit(1), 18)
         XCTAssertEqual(KeyCodes.digit(5), 23)

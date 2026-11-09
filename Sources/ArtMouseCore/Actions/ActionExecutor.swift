@@ -19,10 +19,14 @@ public final class NSWorkspaceOpener: WorkspaceOpening {
 public final class ActionExecutor: ActionExecuting {
     private let poster: EventPosting
     private let workspace: WorkspaceOpening
+    private let cursorLocation: () -> CGPoint
 
-    public init(poster: EventPosting, workspace: WorkspaceOpening = NSWorkspaceOpener()) {
+    public init(poster: EventPosting,
+                workspace: WorkspaceOpening = NSWorkspaceOpener(),
+                cursorLocation: @escaping () -> CGPoint = { CGEvent(source: nil)?.location ?? .zero }) {
         self.poster = poster
         self.workspace = workspace
+        self.cursorLocation = cursorLocation
     }
 
     public func perform(_ action: Action) {
@@ -84,7 +88,7 @@ public final class ActionExecutor: ActionExecuting {
         case (_, true): type = .otherMouseDown
         case (_, false): type = .otherMouseUp
         }
-        let event = CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: .zero, mouseButton: CGMouseButton(rawValue: UInt32(clamping: number)) ?? .center)!
+        let event = CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: cursorLocation(), mouseButton: CGMouseButton(rawValue: UInt32(clamping: number)) ?? .center)!
         event.setIntegerValueField(.mouseEventButtonNumber, value: Int64(number))
         event.setIntegerValueField(.mouseEventClickState, value: clickState)
         event.flags = CGFlagConversion.cgFlags(mods)
