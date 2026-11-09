@@ -117,9 +117,11 @@ final class RecordingExecutor: ActionExecuting {
     private(set) var performed: [Action] = []
     private(set) var holdsBegan: [Action] = []
     private(set) var holdsEnded: [Action] = []
+    private(set) var postedButtons: [(ButtonID, Bool)] = []
     func perform(_ action: Action) { performed.append(action) }
     func beganHold(_ action: Action) { holdsBegan.append(action) }
     func endedHold(_ action: Action) { holdsEnded.append(action) }
+    func postButton(_ id: ButtonID, down: Bool, mods: ModKeys) { postedButtons.append((id, down)) }
 }
 
 final class StubClickLock: ClickLockCoordinating {
