@@ -41,7 +41,8 @@ public final class CursorController: CursorControlling, CursorCoordinating {
         case .moved(let x, let y), .dragged(let x, let y): (dx, dy) = (x, y)
         default: return .passThrough
         }
-        guard let profile = effectiveProfile() else { return .passThrough }
+        guard let resolved = effectiveProfile() else { return .passThrough }
+        let profile = clampedProfile(resolved)
         let speed = (dx * dx + dy * dy).squareRoot()
         let factor = CursorMath.deltaFactor(profile: profile, speed: speed)
         return .cursorTransform(dxFactor: factor.dxFactor, dyFactor: factor.dyFactor)
@@ -88,5 +89,14 @@ public final class CursorController: CursorControlling, CursorCoordinating {
             return match
         }
         return store.settings.activeProfile
+    }
+
+    /// UI may transiently hold out-of-range values while editing; the engine
+    /// clamps at consumption so absurd input can never cause lockout.
+    private func clampedProfile(_ p: CursorSpeedProfile) -> CursorSpeedProfile {
+        var copy = p
+        copy.sensitivity = Swift.min(Swift.max(copy.sensitivity, 200.0), 6400.0)
+        copy.acceleration = Swift.min(Swift.max(copy.acceleration, 0.0), 10.0)
+        return copy
     }
 }

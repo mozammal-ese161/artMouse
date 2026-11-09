@@ -50,15 +50,9 @@ struct ProfileEditorView: View {
         var copy = profile; copy.name = name; return copy
     }
     private func profileWithSensitivity(_ value: Double) -> CursorSpeedProfile {
-        var copy = profile; copy.sensitivity = value.clamped(200...6400); return copy
+        var copy = profile; copy.sensitivity = value; return copy
     }
     private func profileWithAcceleration(_ value: Double) -> CursorSpeedProfile {
-        var copy = profile; copy.acceleration = value.clamped(0...10); return copy
-    }
-}
-
-extension Double {
-    func clamped(_ range: ClosedRange<Double>) -> Double {
-        Swift.min(Swift.max(self, range.lowerBound), range.upperBound)
+        var copy = profile; copy.acceleration = value; return copy
     }
 }

@@ -89,4 +89,19 @@ final class CursorControllerTests: XCTestCase {
         XCTAssertEqual(controller.outcome(forMove: .moved(dx: 8, dy: 0)),
                        .cursorTransform(dxFactor: 6.0, dyFactor: 6.0))
     }
+
+    // Sensitivity 8 clamps to 200 → 200/1600 = 0.125; acceleration 99 clamps to 10.
+    // At speed 8: accel factor = 1 + 10×(8/8) = 11 → total 0.125 × 11 = 1.375.
+    func testEngineClampsOutOfRangeProfileValues() {
+        let store = makeStore()
+        var settings = store.settings
+        let absurd = CursorSpeedProfile(name: "Absurd", sensitivity: 8, acceleration: 99)
+        settings.cursorSpeedProfiles.append(absurd)
+        settings.activeCursorSpeedProfileID = absurd.id
+        store.settings = settings
+        let controller = makeController(store)
+
+        XCTAssertEqual(controller.outcome(forMove: .moved(dx: 8, dy: 0)),
+                       .cursorTransform(dxFactor: 1.375, dyFactor: 1.375))
+    }
 }
