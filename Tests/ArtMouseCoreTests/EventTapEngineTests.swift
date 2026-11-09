@@ -53,6 +53,32 @@ final class EventTapEngineTests: XCTestCase {
         testCenter.post(name: NSWorkspace.didWakeNotification, object: nil)
         XCTAssertTrue(tap.isEnabled)
     }
+
+    func testTapActiveTracksLifecycle() {
+        let tap = MockTap()
+        let engine = EventTapEngine(router: PassThroughRouter(), tapFactory: MockTapFactory(tap: tap))
+        XCTAssertFalse(engine.tapActive)
+        XCTAssertTrue(engine.start())
+        XCTAssertTrue(engine.tapActive)
+        tap.disable()
+        tap.refusesEnable = true
+        // The engine re-enables on the disabled event; the mock refuses, so the
+        // tap stays disabled and the loss must surface through tapActive.
+        tap.emit(CGEvent(source: nil)!, type: .tapDisabledByTimeout)
+        XCTAssertFalse(engine.tapActive)
+        tap.refusesEnable = false
+        tap.enable()                                                   // simulated recovery
+        tap.emit(CGEvent(source: nil)!, type: .leftMouseDown)
+        XCTAssertTrue(engine.tapActive)
+    }
+
+    func testStopResetsTapActive() {
+        let tap = MockTap()
+        let engine = EventTapEngine(router: PassThroughRouter(), tapFactory: MockTapFactory(tap: tap))
+        engine.start()
+        engine.stop()
+        XCTAssertFalse(engine.tapActive)
+    }
 }
 
 // Test doubles + fixture routers
@@ -71,8 +97,12 @@ struct ScalingRouter: EventRouting {
 }
 final class MockTap: EventTapHandle {
     private(set) var isEnabled = true
+    // When true, enable() is refused — models a tap the system keeps disabled
+    // (permission revoked mid-run), mirroring CGEventTapHandleImp, which
+    // re-reads tapIsEnabled after CGEvent.tapEnable and may stay disabled.
+    var refusesEnable = false
     var callback: ((CGEvent, CGEventType) -> CGEvent?)?
-    func enable() { isEnabled = true }
+    func enable() { if !refusesEnable { isEnabled = true } }
     func disable() { isEnabled = false }
     @discardableResult
     func emit(_ event: CGEvent, type: CGEventType) -> CGEvent? { callback?(event, type) }

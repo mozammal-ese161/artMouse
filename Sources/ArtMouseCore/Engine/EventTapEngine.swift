@@ -1,5 +1,6 @@
 import CoreGraphics
 import AppKit
+import Combine
 
 public protocol EventRouting {
     func handle(_ event: InputEvent) -> RouterOutcome
@@ -7,13 +8,23 @@ public protocol EventRouting {
 
 /// Owns the CGEventTap, translates events to InputEvents, consults the
 /// router, and applies the outcome to the real CGEvent. Re-enables the tap
-/// after system wake (spec §7).
+/// after system wake (spec §7) and publishes `tapActive` so the app can
+/// re-surface the permission banner when the system disables the tap mid-run.
 public final class EventTapEngine {
     private let router: EventRouting
     private let tapFactory: EventTapCreating
     private let notificationCenter: NotificationCenter
     private var tap: EventTapHandle?
     private var wakeObserver: NSObjectProtocol?
+
+    /// False while no tap is running; true once `start()` succeeds, after any
+    /// successful re-enable, and while events keep flowing through a live tap.
+    /// Flips false when the tap reports disabled and re-enabling it failed —
+    /// the bootstrap surfaces the permission banner from this.
+    @Published public private(set) var tapActive: Bool = false
+
+    /// Combine view of `tapActive` for observers (task-15 interface).
+    public var tapActivePublisher: Published<Bool>.Publisher { $tapActive }
 
     /// Standard mouse event mask; raw-HID buttons beyond these arrive in
     /// phase 4 via HIDObserver.
@@ -45,6 +56,7 @@ public final class EventTapEngine {
             self?.process(event: event, type: type)
         }) else { return false }
         tap = handle
+        tapActive = true
         registerWakeHandler()
         return true
     }
@@ -52,6 +64,7 @@ public final class EventTapEngine {
     public func stop() {
         tap?.disable()
         tap = nil
+        tapActive = false
         if let observer = wakeObserver {
             notificationCenter.removeObserver(observer)
             wakeObserver = nil
@@ -63,14 +76,28 @@ public final class EventTapEngine {
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
         ) { [weak self] _ in
             self?.tap?.enable()
+            self?.syncTapActive()   // wake re-enable is a re-enable: reflect its result
         }
+    }
+
+    /// Mirrors the tap's real enabled state into `tapActive`. After a disabled
+    /// event this reports whether the re-enable took; on ordinary events it
+    /// marks recovery the moment traffic flows through a live tap again.
+    private func syncTapActive() {
+        guard let tap = tap else {
+            tapActive = false
+            return
+        }
+        tapActive = tap.isEnabled
     }
 
     func process(event: CGEvent, type: CGEventType) -> CGEvent? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             tap?.enable()
+            syncTapActive()   // re-enable failed -> false (banner); recovered -> true
             return event
         }
+        syncTapActive()
         let input = CGEventTranslation.inputEvent(from: type, event)
         switch router.handle(input) {
         case .passThrough:
