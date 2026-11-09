@@ -40,6 +40,22 @@ final class EventRouterTests: XCTestCase {
         XCTAssertEqual(executor.holdsEnded, [.device(.switchPrecisionMode)])
     }
 
+    func testMidHoldUnbindStillEndsHold() {
+        let executor = RecordingExecutor()
+        var settings = GlobalSettings.default
+        settings.buttonBindings = [ButtonBinding(button: .middle, actions: [.device(.switchPrecisionMode)])]
+        let settingsStore = store(settings)
+        let router = EventRouter(settings: settingsStore, executor: executor,
+                                 clickLock: StubClickLock(), cursor: StubCursor())
+        XCTAssertEqual(router.handle(.buttonDown(.middle)), .consume)
+        XCTAssertEqual(executor.holdsBegan, [.device(.switchPrecisionMode)])
+
+        settingsStore.settings = .default   // binding removed while the button is held
+
+        XCTAssertEqual(router.handle(.buttonUp(.middle)), .consume)
+        XCTAssertEqual(executor.holdsEnded, [.device(.switchPrecisionMode)])
+    }
+
     func testMoveDelegatesToCursor() {
         let executor = RecordingExecutor()
         let cursor = StubCursor(outcome: .cursorTransform(dxFactor: 0.5, dyFactor: 0.5))
