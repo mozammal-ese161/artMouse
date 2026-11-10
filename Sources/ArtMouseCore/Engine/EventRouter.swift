@@ -16,6 +16,15 @@ public protocol CursorControlling: AnyObject {
     func outcome(forMove event: InputEvent) -> RouterOutcome
 }
 
+/// Runs and stops button-bound macro programs (Task 3). The router hands a
+/// `.macro` binding's program to `run` on button-down and asks for a stop on
+/// the matching button-up when the program repeats for the duration of the
+/// hold; MacroEngine is the real implementation.
+public protocol MacroCoordinating: AnyObject {
+    func run(program: MacroProgram, for button: ButtonID)
+    func stop(for button: ButtonID)
+}
+
 public final class EventRouter: EventRouting {
     private let settings: SettingsStore
     private let executor: ActionExecuting
@@ -27,6 +36,11 @@ public final class EventRouter: EventRouting {
     /// Every button down and up passes through its intercept BEFORE binding
     /// resolution, so a chord capture can defer or swallow presses.
     private let chords: ChordCoordinating?
+    /// Button-bound macro coordinator (Task 3 wires it); nil leaves `.macro`
+    /// bindings inert (the executor's `.macro` arm is a no-op). Unlike holds
+    /// and click-lock, macros are a distinct arm: the whole program runs on
+    /// button-down, and only hold-mode programs register for an up-time stop.
+    private let macros: MacroCoordinating?
     /// Buttons currently held, mapped to the hold action that began them.
     /// Keyed independently of the current bindings so a mid-hold unbind
     /// (live settings) still delivers endedHold on button-up.
@@ -36,16 +50,23 @@ public final class EventRouter: EventRouting {
     /// the current bindings so a mid-press unbind/rebind still delivers noteUp
     /// on button-up instead of stranding the coordinator in sticky-down.
     private var clickLockButtons: Set<ButtonID> = []
+    /// Buttons whose press started a hold-mode macro program, recorded from
+    /// the bindings at down time. Mirrors `heldButtons`/`clickLockButtons`:
+    /// tracked independently of the current bindings so a mid-hold unbind
+    /// (live settings) still stops the program on button-up.
+    private var macroHeldButtons: Set<ButtonID> = []
 
     public init(settings: SettingsStore, executor: ActionExecuting,
                 clickLock: ClickLockCoordinating, cursor: CursorControlling,
-                scroll: ScrollControlling? = nil, chords: ChordCoordinating? = nil) {
+                scroll: ScrollControlling? = nil, chords: ChordCoordinating? = nil,
+                macros: MacroCoordinating? = nil) {
         self.settings = settings
         self.executor = executor
         self.clickLock = clickLock
         self.cursor = cursor
         self.scroll = scroll
         self.chords = chords
+        self.macros = macros
     }
 
     public func handle(_ event: InputEvent) -> RouterOutcome {
@@ -183,6 +204,20 @@ public final class EventRouter: EventRouting {
             return .consume
         }
 
+        // Macro arm (Task 3): the whole program runs on the down, before the
+        // hold-action loop — a macro is not an `isHoldAction`; it is a
+        // distinct arm. A single-action binding is the macro shape: in any
+        // other composition the executor's inert `.macro` arm applies. Hold
+        // mode registers for the up-time stop; `.none` fires once per press.
+        if case .macro(let steps, let repeatMode, let intervalMS, let proxy) = binding.actions.first,
+           binding.actions.count == 1, let macros = macros {
+            macros.run(program: MacroProgram(steps: steps, repeatMode: repeatMode,
+                                             repeatIntervalMS: intervalMS, modifierProxy: proxy),
+                       for: button)
+            if repeatMode == .hold { macroHeldButtons.insert(button) }
+            return .consume
+        }
+
         for action in binding.actions where action.isHoldAction {
             heldButtons[button] = action
             executor.beganHold(action)
@@ -197,6 +232,15 @@ public final class EventRouter: EventRouting {
     /// Normal binding resolution — the Phase 1 up path (heldButtons and
     /// click-lock bookkeeping), chords stripped.
     private func performNormalUp(_ button: ButtonID) -> RouterOutcome {
+        // Checked first, before the binding guard: macro membership is
+        // recorded at down time, so a hold-mode macro whose binding was
+        // unbound or rebound mid-press still stops its program on release.
+        if macroHeldButtons.contains(button) {
+            macroHeldButtons.remove(button)
+            macros?.stop(for: button)
+            return .consume
+        }
+
         // Checked before the binding guard: bindings are live, and a button
         // unbound mid-hold must still end its hold.
         if let action = heldButtons.removeValue(forKey: button) {
@@ -218,6 +262,16 @@ public final class EventRouter: EventRouting {
         if binding.actions.contains(where: { $0.isClickLock }) {
             _ = clickLock.noteUp(button, now: Date().timeIntervalSince1970)
             return .consume   // coordinator decides posting (Task 9)
+        }
+
+        // A macro binding owns only the press: the program ran on down, and
+        // the physical release routes natively so the OS sees a clean
+        // button-up (pinned by testMacroHoldUpWithoutDownRoutes). Registered
+        // hold releases were consumed by the macro arm above, so this tail is
+        // only the unregistered cases: once-mode ups and ups with no
+        // preceding down.
+        if case .macro = binding.actions.first, binding.actions.count == 1 {
+            return .passThrough
         }
 
         return .consume

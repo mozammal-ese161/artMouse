@@ -29,6 +29,12 @@ public final class MacroEngine {
     private let sleep: (Int) async throws -> Void
     private let flagReader: () -> ModKeys
     private var tasks: [ButtonID: Task<Void, Never>] = [:]
+    /// Bumped on every lifecycle transition (run and stop) for a button. A
+    /// task's hopped finishTask carries its generation and must not mutate the
+    /// registry once a newer task owns the button — without this, the OLD
+    /// task's finishTask nils the NEW run's registration and the new loop
+    /// keeps running but unregistered (stop no-ops on it forever).
+    private var generations: [ButtonID: Int] = [:]
     private var keysDown: [ButtonID: UInt64] = [:]   // button → currently-held macro key
 
     public init(poster: EventPosting,
@@ -52,16 +58,24 @@ public final class MacroEngine {
         stop(for: button)
         // finishTask mutates the task dictionaries, so it hops back to the
         // main queue where run/stop live (the calling-discipline contract);
-        // the spawned Task itself only posts events and sleeps.
+        // the spawned Task itself only posts events and sleeps. The hop
+        // carries this run's generation so a superseded task's finishTask
+        // cannot clear a newer run's registration (the generation guard).
+        generations[button, default: 0] += 1
+        let generation = generations[button]!
         tasks[button] = Task { [weak self] in
             await self?.runLoop(program: program)
             Task { @MainActor [weak self] in
-                self?.finishTask(for: button)
+                self?.finishTask(for: button, generation: generation)
             }
         }
     }
 
     public func stop(for button: ButtonID) {
+        // Invalidate older generations first: a late hopped finishTask from
+        // the task being stopped must not clear a task re-registered after
+        // this stop (same race as in run, from the other direction).
+        generations[button, default: 0] += 1
         tasks[button]?.cancel()
         tasks[button] = nil
         releaseHeldKey(for: button)
@@ -103,11 +117,15 @@ public final class MacroEngine {
         }
     }
 
-    private func finishTask(for button: ButtonID) {
+    private func finishTask(for button: ButtonID, generation: Int) {
+        // The held key belongs to the finishing task, so release it even when
+        // a newer generation has already taken the button.
         releaseHeldKey(for: button)
-        // Only clear if this task is still the registered one (a newer run
-        // may have replaced it).
-        if tasks[button] != nil { tasks[button] = nil }
+        // Only clear if this task is still the registered one: any run or
+        // stop since it started bumped the generation (a newer run may have
+        // replaced it, or a stop already cleaned up).
+        guard generations[button] == generation else { return }
+        tasks[button] = nil
     }
 
     // Kept for hold-modes that hold a key across steps in later phases;
@@ -177,6 +195,12 @@ public final class MacroEngine {
         }
     }
 }
+
+/// The router-facing surface of the macro engine (Task 3): a button-down runs
+/// the button's program, a button-up stops a hold-mode loop. Same main-run
+/// loop calling discipline as every other coordinator (only run/stop mutate
+/// the registries; the spawned Tasks only post events and sleep).
+extension MacroEngine: MacroCoordinating {}
 
 private extension Int {
     func clamped(_ range: ClosedRange<Int>) -> Int {

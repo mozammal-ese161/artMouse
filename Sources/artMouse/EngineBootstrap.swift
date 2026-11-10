@@ -50,9 +50,13 @@ final class EngineBootstrap {
         let chordEngine = ChordEngine(settings: store)
         let executor = ActionExecutor(poster: poster, cursor: cursorController, wheel: scrollController)
         let clickLock = ClickLockCoordinator(executor: executor)
+        // Button-bound macros share the same poster so their synthetic keys
+        // and clicks carry the private-source tag too (loop protection).
+        let macroEngine = MacroEngine(poster: poster)
         let router = EventRouter(settings: store, executor: executor,
                                  clickLock: clickLock, cursor: cursorController,
-                                 scroll: scrollController, chords: chordEngine)
+                                 scroll: scrollController, chords: chordEngine,
+                                 macros: macroEngine)
         let tapEngine = EventTapEngine(router: router, tapFactory: CGEventTapFactory(),
                                        isSelfPosted: { poster.owns($0) })
         self.engine = tapEngine
@@ -83,7 +87,12 @@ final class EngineBootstrap {
         // state — ScrollController's autoDirection, ScrollEmitter's mode and
         // keysDown (fed by the 8 ms pump below), and ChordEngine's capture —
         // which the event-tap callback path, the emitter pump, and wheel-mode
-        // button actions all mutate. Every timer is scheduled on the current
+        // button actions all mutate. Phase 3's macro state joins the same
+        // contract: MacroEngine's tasks/generations registries and the
+        // router's macroHeldButtons are mutated only by run/stop on the
+        // event-tap callback path; MacroEngine's spawned Tasks only post
+        // events and sleep, hopping their finishTask back to the main actor.
+        // Every timer is scheduled on the current
         // (main) run loop, matching Timer.scheduledTimer(on: .main, ...)
         // semantics; CGEvent tap callbacks are delivered on that same main run
         // loop, and start() must therefore only ever be called from the main

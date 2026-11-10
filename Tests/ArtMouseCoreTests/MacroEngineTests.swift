@@ -112,6 +112,38 @@ final class MacroEngineTests: XCTestCase {
         XCTAssertFalse(engine.isRunning(for: .middle))
         XCTAssertFalse(engine.isRunning(for: .fourth))
     }
+
+    // Same-button rapid re-trigger: run A, then run B (different keycode)
+    // immediately. The OLD task's hopped finishTask must never clobber the
+    // NEW run's registration — when it does, the new loop keeps running but
+    // unregistered, so stop(for:) no-ops on it and events keep flowing.
+    func testRapidRerunKeepsNewRegistration() async {
+        let engine = makeEngine()
+        engine.run(program: MacroProgram(
+            steps: [.enterKey(keyCode: 5, mods: [])], repeatMode: .hold,
+            repeatIntervalMS: 10, modifierProxy: false), for: .middle)
+        engine.run(program: MacroProgram(
+            steps: [.enterKey(keyCode: 6, mods: [])], repeatMode: .hold,
+            repeatIntervalMS: 10, modifierProxy: false), for: .middle)
+        // Real-time settle while the NEW program is registered: the OLD task's
+        // hopped finishTask needs a window to land here. Without one, the hop
+        // lands after the stop below (dict already empty) and the clobber is
+        // never exercised — the suite's standard settle idiom makes this test
+        // deterministic.
+        try? await Task.sleep(nanoseconds: 30_000_000)
+        engine.stop(for: .middle)
+        let countAtStop = poster.events.count
+        // Real-time settle: a straggler pair can straddle yield windows when
+        // the OS preempts the task between its own down and up posts.
+        try? await Task.sleep(nanoseconds: 30_000_000)
+        for _ in 0..<20 { await Task.yield() }
+        let count1 = poster.events.count
+        XCTAssertTrue(count1 - countAtStop <= 2)   // ≤ one in-flight pair
+        for _ in 0..<20 { await Task.yield() }
+        let count2 = poster.events.count
+        XCTAssertEqual(count2, count1)             // stable: loop halted
+        XCTAssertFalse(engine.isRunning(for: .middle))
+    }
 }
 
 /// Synchronous single-pass execution without the Task wrapper, so tests

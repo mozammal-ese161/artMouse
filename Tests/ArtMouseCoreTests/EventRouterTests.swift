@@ -350,3 +350,53 @@ final class RouterChordTests: XCTestCase {
         XCTAssertEqual(executor.holdsEnded, [.device(.switchPrecisionMode)])
     }
 }
+
+final class RouterMacroTests: XCTestCase {
+    final class RecordingMacroEngine: MacroCoordinating {
+        private(set) var ran: [(MacroProgram, ButtonID)] = []
+        private(set) var stopped: [ButtonID] = []
+        func run(program: MacroProgram, for button: ButtonID) { ran.append((program, button)) }
+        func stop(for button: ButtonID) { stopped.append(button) }
+    }
+
+    private func macroStore(_ action: Action) -> SettingsStore {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let store = SettingsStore(directory: dir)
+        store.settings.buttonBindings = [ButtonBinding(button: .fourth, actions: [action])]
+        return store
+    }
+
+    func testMacroOnceRunsOnDown() {
+        let engine = RecordingMacroEngine()
+        let action = Action.macro(steps: [.enterKey(keyCode: 5, mods: [])], repeatMode: .none,
+                                  repeatIntervalMS: 100, modifierProxy: false)
+        let router = EventRouter(settings: macroStore(action), executor: RecordingExecutor(),
+                                 clickLock: StubClickLock(), cursor: StubCursor(), macros: engine)
+        XCTAssertEqual(router.handle(.buttonDown(.fourth)), .consume)
+        XCTAssertEqual(engine.ran.count, 1)
+        XCTAssertEqual(engine.ran[0].1, .fourth)
+        XCTAssertEqual(engine.stopped, [])
+    }
+
+    func testMacroHoldRunsOnDownAndStopsOnUp() {
+        let engine = RecordingMacroEngine()
+        let action = Action.macro(steps: [.enterKey(keyCode: 5, mods: [])], repeatMode: .hold,
+                                  repeatIntervalMS: 100, modifierProxy: false)
+        let router = EventRouter(settings: macroStore(action), executor: RecordingExecutor(),
+                                 clickLock: StubClickLock(), cursor: StubCursor(), macros: engine)
+        XCTAssertEqual(router.handle(.buttonDown(.fourth)), .consume)
+        XCTAssertEqual(engine.ran.count, 1)
+        XCTAssertEqual(router.handle(.buttonUp(.fourth)), .consume)
+        XCTAssertEqual(engine.stopped, [.fourth])
+    }
+
+    func testMacroHoldUpWithoutDownRoutes() {
+        let engine = RecordingMacroEngine()
+        let action = Action.macro(steps: [], repeatMode: .hold, repeatIntervalMS: 100, modifierProxy: false)
+        let router = EventRouter(settings: macroStore(action), executor: RecordingExecutor(),
+                                 clickLock: StubClickLock(), cursor: StubCursor(), macros: engine)
+        XCTAssertEqual(router.handle(.buttonUp(.fourth)), .passThrough)
+        XCTAssertEqual(engine.stopped, [])
+    }
+}
