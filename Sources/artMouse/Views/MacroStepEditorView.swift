@@ -78,8 +78,14 @@ struct MacroStepEditorView: View {
 }
 
 /// Clamp in Double space so an out-of-range integer conversion can never run.
+/// NaN compares false against everything, so it is routed to the range's
+/// lower bound explicitly: `Swift.max(nan, 0)` propagates NaN in this helper's
+/// argument order and the conversion would trap again ("cannot be converted…
+/// infinite or NaN") — the pre-fix `max(0, value)` form absorbed NaN only by
+/// accident of its argument order. ±inf lands on the lower bound too; either
+/// extreme is an acceptable landing spot for a pasted "inf".
 private extension Double {
     func clamped(_ range: ClosedRange<Double>) -> Double {
-        Swift.min(Swift.max(self, range.lowerBound), range.upperBound)
+        isFinite ? Swift.min(Swift.max(self, range.lowerBound), range.upperBound) : range.lowerBound
     }
 }
