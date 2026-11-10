@@ -1,3 +1,10 @@
+/// Identifiable keyed by the stable settings key so Devices-tab sheets can
+/// present identities with `.sheet(item:)` (Phase 4). Two entries for the
+/// same VID/PID share an id by design — they are the same physical device.
+extension HIDDeviceIdentity: Identifiable {
+    public var id: String { settingsKey }
+}
+
 public struct HIDDeviceIdentity: Equatable, Hashable {
     public var vendorID: Int
     public var productID: Int

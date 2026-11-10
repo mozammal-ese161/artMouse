@@ -246,6 +246,67 @@ final class AppModel {
         save()
     }
 
+    // MARK: Devices (Phase 4)
+
+    /// Creates a skeleton profile for an attached device and returns it. The
+    /// profile editor sheet then fills parts/DPI.
+    @discardableResult
+    func addDeviceProfile(for device: HIDDeviceIdentity) -> DeviceProfile {
+        let profile = DeviceProfile(name: device.name,
+                                    vendorID: device.vendorID,
+                                    productID: device.productID)
+        var settings = store.settings
+        settings.deviceProfiles.append(profile)
+        store.settings = settings
+        save()
+        return profile
+    }
+
+    func updateDeviceProfile(_ profile: DeviceProfile) {
+        var settings = store.settings
+        if let index = settings.deviceProfiles.firstIndex(where: { $0.id == profile.id }) {
+            settings.deviceProfiles[index] = profile
+        }
+        store.settings = settings
+        save()
+    }
+
+    func removeDeviceProfile(_ id: UUID) {
+        var settings = store.settings
+        settings.deviceProfiles.removeAll { $0.id == id }
+        store.settings = settings
+        save()
+    }
+
+    /// Toggle helper over `disabledDeviceKeys` (settings-key based, so it
+    /// works for devices without a profile too).
+    func toggleDeviceDisabled(_ device: HIDDeviceIdentity) {
+        var settings = store.settings
+        let key = device.settingsKey
+        if let index = settings.disabledDeviceKeys.firstIndex(of: key) {
+            settings.disabledDeviceKeys.remove(at: index)
+        } else {
+            settings.disabledDeviceKeys.append(key)
+        }
+        store.settings = settings
+        save()
+    }
+
+    func deviceProfile(for device: HIDDeviceIdentity) -> DeviceProfile? {
+        store.settings.deviceProfile(matchingVendor: device.vendorID, productID: device.productID)
+    }
+
+    func setDeviceLogPersist(_ on: Bool) {
+        deviceLog?.setPersistToFile(on)
+    }
+
+    /// IORegistry details for the disclosure row (glue call, on demand —
+    /// never on the hot path).
+    func registryDetails(for device: HIDDeviceIdentity) -> [String: String] {
+        IOKitDeviceEnumerator().registryDetails(vendorID: device.vendorID,
+                                                productID: device.productID)
+    }
+
     // Settings import/export (Phase 3 Task 9). Import is all-or-nothing: the
     // store's strict importData throws on malformed data before any assignment,
     // so the user's settings survive a bad file untouched.
