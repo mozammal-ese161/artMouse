@@ -4,14 +4,17 @@ import CoreGraphics
 
 final class MacroEngineTests: XCTestCase {
     private let poster = RecordingPoster()
-    private var sleptMS: [Int] = []
+    /// Thread-safe: hold-mode loops append from concurrent engine Tasks
+    /// (unsynchronized Array.append is a SIGSEGV-grade race), so the recorder
+    /// locks like RecordingPoster; reads return a snapshot under the lock.
+    private let sleptMS = LockedSleepRecorder()
     private var physicalFlags: ModKeys = []
 
     private func makeEngine() -> MacroEngine {
         MacroEngine(
             poster: poster,
             cursorLocation: { CGPoint(x: 11, y: 22) },
-            sleep: { [weak self] ms in self?.sleptMS.append(ms) },
+            sleep: { [weak self] ms in self?.sleptMS.record(ms) },
             flagReader: { [weak self] in self?.physicalFlags ?? [] })
     }
 
@@ -32,7 +35,7 @@ final class MacroEngineTests: XCTestCase {
         await engine.runAndWait(program: MacroProgram(
             steps: [.wait(milliseconds: 250), .enterKey(keyCode: 5, mods: [])],
             repeatMode: .none, repeatIntervalMS: 100, modifierProxy: false), for: .middle)
-        XCTAssertEqual(sleptMS, [250])
+        XCTAssertEqual(sleptMS.snapshot, [250])
         XCTAssertEqual(poster.events.count, 2)   // only the key pair
     }
 
@@ -62,7 +65,7 @@ final class MacroEngineTests: XCTestCase {
         await engine.runAndWait(program: MacroProgram(
             steps: [.wait(milliseconds: 99_999)], repeatMode: .none,
             repeatIntervalMS: 100, modifierProxy: false), for: .middle)
-        XCTAssertEqual(sleptMS, [60_000])   // clamped 1...60000
+        XCTAssertEqual(sleptMS.snapshot, [60_000])   // clamped 1...60000
     }
 
     func testHoldRepeatRunsUntilStop() async {
@@ -151,5 +154,23 @@ final class MacroEngineTests: XCTestCase {
 private extension MacroEngine {
     func runAndWait(program: MacroProgram, for button: ButtonID) async {
         await execute(program: program)
+    }
+}
+
+/// Locked append + snapshot read for sleep durations, same pattern as
+/// RecordingPoster: `events` reads a copy under the lock; reading a stale
+/// copy is fine for every caller.
+final class LockedSleepRecorder {
+    private let lock = NSLock()
+    private var values: [Int] = []
+    func record(_ ms: Int) {
+        lock.lock()
+        defer { lock.unlock() }
+        values.append(ms)
+    }
+    var snapshot: [Int] {
+        lock.lock()
+        defer { lock.unlock() }
+        return values
     }
 }

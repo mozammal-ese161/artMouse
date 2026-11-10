@@ -23,6 +23,11 @@ final class EngineBootstrap {
     /// 8 ms cadence pump for the scroll emitter (Task 8).
     private var emitterDriver: Timer?
     private var appWatcher: AppWatcher?
+    /// Strong anchor: the executor holds snapping weakly (cycle hygiene), so
+    /// the bootstrap owns the controller's lifetime. A class-level `let` cannot
+    /// be assigned from start(), and the poster it shares is created there —
+    /// optional var matches this class's idiom for engine-owned objects.
+    private var snappingController: SnappingController?
     private var cancellable: AnyCancellable?
 
     /// Safety-restore warning mirrored from the cursor controller on every
@@ -54,6 +59,7 @@ final class EngineBootstrap {
         // Snapping shares the poster for the same loop-protection reason: the
         // warp-and-click events it posts must carry the private-source tag.
         let snappingController = SnappingController(finder: AXDefaultButtonFinder(), poster: poster)
+        self.snappingController = snappingController
         let executor = ActionExecutor(poster: poster, cursor: cursorController, wheel: scrollController,
                                       snapping: snappingController)
         let clickLock = ClickLockCoordinator(executor: executor)
