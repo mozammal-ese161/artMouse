@@ -31,9 +31,13 @@ public final class ScrollController: ScrollControlling {
         guard let current = store.settings.activeWheelProfile,
               let index = profiles.firstIndex(where: { $0.id == current.id }) else { return }
         store.settings.activeWheelModeProfileID = profiles[(index + 1) % profiles.count].id
+        // Fix round 1: a live auto must not survive the profile switch.
+        emitter.stop()
+        autoDirection = nil
     }
 
     public func disposition(forScroll axis: ScrollAxis, ticks: Double) -> ScrollDisposition {
+        guard ticks != 0 else { return .passThrough }   // native momentum events can carry zero deltas
         guard let profile = store.settings.activeWheelProfile else { return .passThrough }
         let sens = profile.sensFactor.clamped(0.1...10.0)
         let accel = profile.acceleration.clamped(0...10.0)
@@ -45,11 +49,13 @@ public final class ScrollController: ScrollControlling {
 
         // 1. Wheel→keys takes absolute precedence.
         if let keys = profile.keyEmulation {
+            if autoDirection != nil { emitter.stop(); autoDirection = nil }   // fix round 1: end a live auto
             emitter.beginKeys(keys, direction: direction, now: clock())
             return .intercept
         }
         // 2. Smooth scroll overlay.
         if profile.smoothScroll {
+            if autoDirection != nil { emitter.stop(); autoDirection = nil }   // fix round 1: end a live auto
             let magnitude = Double(abs(ticks))
             let total = magnitude * sens * (1 + accel * (magnitude / Self.accelerationReferenceTicks))
             emitter.beginSmooth(direction: direction, lines: total,
@@ -64,6 +70,7 @@ public final class ScrollController: ScrollControlling {
                                      reverseVertical: profile.reverseVertical,
                                      reverseHorizontal: profile.reverseHorizontal)
         case .constant:
+            if autoDirection != nil { emitter.stop(); autoDirection = nil }   // fix round 1: end a live auto
             emitter.emitOnce(direction: direction, lines: lines)
             emitter.noteInput(now: clock())
             return .intercept

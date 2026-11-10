@@ -72,6 +72,13 @@ public final class ScrollEmitter {
         keysDown = true
     }
 
+    /// Ends the active mode immediately (profile switch / wheel-mode
+    /// rotation), releasing any held key first.
+    public func stop() {
+        releaseKeysIfHeld()
+        mode = .idle
+    }
+
     public func tick(now: Double) {
         switch mode {
         case .idle:
@@ -87,12 +94,13 @@ public final class ScrollEmitter {
                 ? .smooth(direction: direction, pendingLines: pending, chunkLines: chunk,
                           interval: interval, nextDue: nextDue)
                 : .idle
-        case .auto(let direction, let lines, let interval, _, var emissions, let stopAfter):
+        case .auto(let direction, let lines, let interval, let due, var emissions, let stopAfter):
             if emissions >= stopAfter { mode = .idle; return }
-            // Auto cadence is driven by the CALLER: the controller pairs auto
-            // mode with an emitter-driver timer at autoIntervalMS and calls
-            // tick at that cadence (contract documented in Task 4). Each tick
-            // emits once; noteInput resets the counter.
+            // Fix round 1: auto cadence is gated by `due` (armed at beginAuto,
+            // advanced by the interval on each emission), so a fast cadence
+            // pump (Task 8's 8 ms timer) cannot outrun autoIntervalMS. Each
+            // emission fires once; noteInput resets the stop counter only.
+            guard now >= due else { return }
             postScroll(direction: direction, lines: lines)
             emissions += 1
             mode = .auto(direction: direction, lines: lines, interval: interval,

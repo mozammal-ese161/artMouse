@@ -126,4 +126,29 @@ final class ScrollEmitterTests: XCTestCase {
         XCTAssertEqual(UInt64(poster.events[1].getIntegerValueField(.keyboardEventKeycode)), KeyCodes.f)
         XCTAssertEqual(UInt64(poster.events[2].getIntegerValueField(.keyboardEventKeycode)), 40)
     }
+
+    // Fix round 1 (escalated Task 3 note): tick's .auto case stored `due` but
+    // never gated on it, so Task 8's 8 ms pump would emit at ~8 ms regardless
+    // of autoIntervalMS.
+    func testAutoRespectsIntervalUnderFastPump() {
+        let emitter = makeEmitter()
+        emitter.beginAuto(direction: .up, lines: 3, intervalMS: 50, stopAfterTicks: 10, now: now)
+        for _ in 0..<5 { now += 0.008; emitter.tick(now: now) }    // 8 ms pump → interval not reached
+        XCTAssertEqual(poster.events.count, 0)
+        now += 0.01                                                // now = 0.05 = due
+        emitter.tick(now: now)
+        XCTAssertEqual(poster.events.count, 1)
+    }
+
+    // Fix round 1 (review finding): a profile switch must end a live auto
+    // immediately.
+    func testStopHaltsAuto() {
+        let emitter = makeEmitter()
+        emitter.beginAuto(direction: .up, lines: 3, intervalMS: 50, stopAfterTicks: 10, now: now)
+        XCTAssertTrue(emitter.isActive)
+        emitter.stop()
+        now += 0.05; emitter.tick(now: now)
+        XCTAssertEqual(poster.events.count, 0)
+        XCTAssertFalse(emitter.isActive)
+    }
 }

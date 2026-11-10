@@ -95,4 +95,36 @@ final class ScrollControllerTests: XCTestCase {
         controller.activateNextWheelMode()
         XCTAssertEqual(store.settings.activeWheelProfile, b)   // no named Default → first ("A") was active
     }
+
+    // Fix round 1 (review finding): switching profiles mid-auto must not strand
+    // the running auto emitter.
+    func testSwitchToConstantStopsRunningAuto() {
+        let store = makeStore(profiles: [WheelModeProfile(name: "Default", mode: .auto)])
+        let emitter = ScrollEmitter(poster: poster)
+        let controller = ScrollController(store: store, emitter: emitter)
+        XCTAssertEqual(controller.disposition(forScroll: .vertical, ticks: 1), .intercept)
+        XCTAssertTrue(emitter.isActive)                        // auto running under the auto profile
+        store.settings.wheelModeProfiles = [WheelModeProfile(name: "Default", mode: .constant)]
+        store.settings.activeWheelModeProfileID = nil
+        XCTAssertEqual(controller.disposition(forScroll: .vertical, ticks: 1), .intercept)
+        XCTAssertFalse(emitter.isActive)                       // auto stopped; emitOnce leaves no mode running
+    }
+
+    func testSwitchWheelModeStopsRunningAuto() {
+        let store = makeStore(profiles: [WheelModeProfile(name: "A", mode: .auto),
+                                         WheelModeProfile(name: "B")])
+        let emitter = ScrollEmitter(poster: poster)
+        let controller = ScrollController(store: store, emitter: emitter)
+        XCTAssertEqual(controller.disposition(forScroll: .vertical, ticks: 1), .intercept)
+        XCTAssertTrue(emitter.isActive)                        // auto running under profile A
+        controller.activateNextWheelMode()
+        XCTAssertFalse(emitter.isActive)                       // wheel-mode rotation stops the auto
+    }
+
+    // Native momentum events can carry zero deltas — nothing to resolve.
+    func testZeroTickPassesThrough() {
+        let store = makeStore(profiles: [WheelModeProfile(name: "Default")])
+        let controller = ScrollController(store: store, emitter: ScrollEmitter(poster: poster))
+        XCTAssertEqual(controller.disposition(forScroll: .vertical, ticks: 0), .passThrough)
+    }
 }
