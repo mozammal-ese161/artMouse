@@ -170,6 +170,8 @@ public final class ActionExecutor: ActionExecuting {
         event.flags = CGFlagConversion.cgFlags(spec.mods)
         poster.post(event)
         postedScrollEvents.append(event)
+        // bounded: test-recording surface, not production state
+        if postedScrollEvents.count > 16 { postedScrollEvents.removeFirst(postedScrollEvents.count - 16) }
     }
 
     /// Down + up pair with the given modifier flags (mission, zoom, app switcher).

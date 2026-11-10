@@ -46,4 +46,12 @@ final class WheelModeSwitchingTests: XCTestCase {
         XCTAssertEqual(ScrollDirection.derived(axis: .horizontal, ticks: -1), .left)
         XCTAssertEqual(ScrollDirection.derived(axis: .vertical, ticks: 0), .down)
     }
+
+    // Fix round 1 (review finding): the test-recording surface must not retain
+    // one event per wheel tick for the process lifetime — bounded to the last 16.
+    func testPostedScrollEventsAreBounded() {
+        let executor = ActionExecutor(poster: RecordingPoster())
+        for _ in 0..<20 { executor.perform(.scroll(ScrollSpec(direction: .up))) }
+        XCTAssertEqual(executor.postedScrollEvents.count, 16)
+    }
 }
