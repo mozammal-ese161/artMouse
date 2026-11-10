@@ -21,8 +21,7 @@ struct ActionEditorView: View {
         case .switcher(let op): SwitcherActionEditorView(op: op, onChange: onChange)
         case .open(let target): OpenActionEditorView(target: target, onChange: onChange)
         case .device(let op): DeviceActionEditorView(op: op, onChange: onChange)
-        // Interim placeholder: the Scroll category + editor land in Task 10.
-        case .some(.scroll): Text("Scroll").foregroundStyle(.secondary)
+        case .scroll(let spec): ScrollActionEditorView(spec: spec, onChange: onChange)
         // SDK adaptation: `Action` has its own `.none` case, so a bare `case .none`
         // binds to `Optional.none` (nil) and the wrapped `Action.none` payload
         // needs its own pattern; both mean "no action" and render as Unbound.
@@ -44,7 +43,7 @@ struct ActionEditorView: View {
 }
 
 enum ActionCategory: CaseIterable {
-    case none, click, mission, music, zoom, switcher, open, device
+    case none, click, mission, music, zoom, switcher, open, device, scroll
 
     var label: String {
         switch self {
@@ -56,6 +55,7 @@ enum ActionCategory: CaseIterable {
         case .switcher: return "Switcher"
         case .open: return "Open"
         case .device: return "Device"
+        case .scroll: return "Scroll"
         }
     }
 
@@ -69,7 +69,7 @@ enum ActionCategory: CaseIterable {
         case .switcher: self = .switcher
         case .open: self = .open
         case .device: self = .device
-        case .scroll: self = .none   // interim: Scroll category lands in Task 10
+        case .scroll: self = .scroll
         }
     }
 
@@ -83,6 +83,7 @@ enum ActionCategory: CaseIterable {
         case .switcher: return .switcher(.nextApp)
         case .open: return .open(.path(""))
         case .device: return .device(.activateCursorSpeed(nil))
+        case .scroll: return .scroll(ScrollSpec(direction: .up))
         }
     }
 }

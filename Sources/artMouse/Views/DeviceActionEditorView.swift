@@ -16,7 +16,7 @@ struct DeviceActionEditorView: View {
             Text("DPI Down").tag(DeviceOp.dpiDown).disabled(true)          // phase 4
             Text("DPI Shift").tag(DeviceOp.dpiShift).disabled(true)        // phase 4
             Text("Default DPI").tag(DeviceOp.defaultDPI).disabled(true)    // phase 4
-            Text("Switch Wheel Mode").tag(DeviceOp.switchWheelMode).disabled(true)  // phase 2
+            Text("Switch Wheel Mode").tag(DeviceOp.switchWheelMode)
         }
         .labelsHidden()
         .frame(width: 230)

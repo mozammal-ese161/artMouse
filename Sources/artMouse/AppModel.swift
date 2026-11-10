@@ -42,6 +42,33 @@ final class AppModel {
         save()
     }
 
+    /// Unlike buttons, an existing scroll binding set to nil keeps the
+    /// binding with empty actions: the router filters empty scroll bindings,
+    /// and the UI keeps the row visible so the user can re-bind or Clear it.
+    func setScrollBinding(axis: ScrollAxis, direction: ScrollDirection, action: Action?) {
+        var settings = store.settings
+        if let index = settings.scrollBindings.firstIndex(where: { $0.axis == axis && $0.direction == direction }) {
+            settings.scrollBindings[index].actions = action.map { [$0] } ?? []
+        } else if let action {
+            settings.scrollBindings.append(ScrollBinding(axis: axis, direction: direction, actions: [action]))
+        }
+        store.settings = settings
+        save()
+    }
+
+    func scrollBinding(axis: ScrollAxis, direction: ScrollDirection) -> ScrollBinding? {
+        store.settings.scrollBindings.first { $0.axis == axis && $0.direction == direction }
+    }
+
+    /// Clear removes the binding entirely, dropping the "bound but none"
+    /// marker row so the wheel direction behaves like an unbound default.
+    func removeScrollBinding(axis: ScrollAxis, direction: ScrollDirection) {
+        var settings = store.settings
+        settings.scrollBindings.removeAll { $0.axis == axis && $0.direction == direction }
+        store.settings = settings
+        save()
+    }
+
     func save() {
         try? store.save()
     }
