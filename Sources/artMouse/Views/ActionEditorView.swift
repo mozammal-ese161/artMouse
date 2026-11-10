@@ -22,6 +22,10 @@ struct ActionEditorView: View {
         case .open(let target): OpenActionEditorView(target: target, onChange: onChange)
         case .device(let op): DeviceActionEditorView(op: op, onChange: onChange)
         case .scroll(let spec): ScrollActionEditorView(spec: spec, onChange: onChange)
+        // Task 6/7 replace: interim placeholder editors for the new cases.
+        case .macro: Text("Macro (Task 6)").foregroundStyle(.secondary)
+        // Single-case payload is not bound yet (brief's `let op` warns unused).
+        case .snapping: Text("Snapping (Task 7)").foregroundStyle(.secondary)
         // SDK adaptation: `Action` has its own `.none` case, so a bare `case .none`
         // binds to `Optional.none` (nil) and the wrapped `Action.none` payload
         // needs its own pattern; both mean "no action" and render as Unbound.
@@ -70,6 +74,10 @@ enum ActionCategory: CaseIterable {
         case .open: self = .open
         case .device: self = .device
         case .scroll: self = .scroll
+        // Task 6/7 replace: no category yet; picker selection still routes
+        // through `initialAction` until the real categories land.
+        case .macro: self = .none
+        case .snapping: self = .none
         }
     }
 

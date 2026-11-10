@@ -10,6 +10,8 @@ public enum Action: Hashable, Codable {
     case switcher(SwitcherOp)
     case open(OpenTarget)
     case device(DeviceOp)
+    case macro(steps: [MacroStep], repeatMode: RepeatMode, repeatIntervalMS: Int, modifierProxy: Bool)
+    case snapping(SnappingOp)
     case scroll(ScrollSpec)
 
     /// Hold actions activate on button-down and revert on button-up.

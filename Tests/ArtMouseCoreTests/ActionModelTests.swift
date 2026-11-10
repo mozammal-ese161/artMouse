@@ -58,4 +58,24 @@ final class ActionModelTests: XCTestCase {
         let data = try JSONEncoder().encode(chord)
         XCTAssertEqual(try JSONDecoder().decode(Chord.self, from: data), chord)
     }
+
+    func testMacroAndSnappingCodableRoundTrip() throws {
+        let steps: [MacroStep] = [
+            .enterKey(keyCode: 40, mods: [.command]),
+            .wait(milliseconds: 150),
+            .click(op: .left, mods: []),
+        ]
+        let original: [Action] = [
+            .macro(steps: steps, repeatMode: .hold, repeatIntervalMS: 250, modifierProxy: true),
+            .snapping(.snap(click: true, bounce: false)),
+        ]
+        let data = try JSONEncoder().encode(original)
+        XCTAssertEqual(try JSONDecoder().decode([Action].self, from: data), original)
+    }
+
+    func testMacroAndSnappingAreNotHoldActions() {
+        XCTAssertFalse(Action.macro(steps: [], repeatMode: .hold, repeatIntervalMS: 100, modifierProxy: false).isHoldAction)
+        XCTAssertFalse(Action.snapping(.snap(click: true, bounce: true)).isHoldAction)
+        XCTAssertFalse(Action.macro(steps: [], repeatMode: .hold, repeatIntervalMS: 100, modifierProxy: false).isClickLock)
+    }
 }

@@ -51,6 +51,10 @@ public final class ActionExecutor: ActionExecuting {
             performClick(op, mods: mods)
         case .mission, .music, .zoom, .switcher, .open, .device:
             performAction(action)   // Task 10 replaces this stub dispatch
+        case .macro:
+            break   // MacroEngine routing lands in Task 3
+        case .snapping:
+            break   // SnappingController wiring lands in Task 4
         case .scroll(let spec):
             performScroll(spec)
         }
