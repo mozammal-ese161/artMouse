@@ -17,6 +17,8 @@ struct SettingsWindow: View {
             TabView {
                 ButtonsTabView(model: model)
                     .tabItem { Text("Buttons") }
+                WheelTabView(model: model)
+                    .tabItem { Text("Wheel") }
                 CursorTabView(model: model)
                     .tabItem { Text("Cursor") }
                 DevicesTabView(model: model)

@@ -83,4 +83,35 @@ final class AppModel {
         store.settings.precisionProfileID = id
         save()
     }
+
+    func addWheelProfile() {
+        var settings = store.settings
+        settings.wheelModeProfiles.append(
+            WheelModeProfile(name: "Profile \(settings.wheelModeProfiles.count + 1)"))
+        store.settings = settings
+        save()
+    }
+
+    func removeWheelProfile(_ id: UUID) {
+        var settings = store.settings
+        guard settings.wheelModeProfiles.count > 1 else { return }   // never zero profiles
+        settings.wheelModeProfiles.removeAll { $0.id == id }
+        if settings.activeWheelModeProfileID == id { settings.activeWheelModeProfileID = nil }
+        store.settings = settings
+        save()
+    }
+
+    func updateWheelProfile(_ profile: WheelModeProfile) {
+        var settings = store.settings
+        if let index = settings.wheelModeProfiles.firstIndex(where: { $0.id == profile.id }) {
+            settings.wheelModeProfiles[index] = profile
+        }
+        store.settings = settings
+        save()
+    }
+
+    func setActiveWheelProfile(_ id: UUID) {
+        store.settings.activeWheelModeProfileID = id
+        save()
+    }
 }
