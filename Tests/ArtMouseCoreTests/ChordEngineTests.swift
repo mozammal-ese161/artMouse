@@ -30,6 +30,26 @@ final class ChordEngineTests: XCTestCase {
         XCTAssertEqual(engine.intercept(.buttonUp(.middle), now: 0.05), .flush([.middle]))
     }
 
+    func testReleasingInitiatorFlushesAllHeld() {
+        // 4-button chord so every down below EXTENDS (none set-equals) and the
+        // capture is still alive with three held buttons when the initiator lifts.
+        let engine = makeEngine([Chord(buttons: [.middle, .fourth, .fifth, .left], actions: [.none], timeout: 1.0)])
+        XCTAssertEqual(engine.intercept(.buttonDown(.middle), now: 0), .consume)
+        XCTAssertEqual(engine.intercept(.buttonDown(.fourth), now: 0.05), .consume)
+        XCTAssertEqual(engine.intercept(.buttonDown(.fifth), now: 0.10), .consume)
+        // Initiator released mid-chord: the chord is abandoned — everything held flushes.
+        XCTAssertEqual(engine.intercept(.buttonUp(.middle), now: 0.15), .flush([.middle, .fourth, .fifth]))
+    }
+
+    func testNonInitiatorReleaseThenInitiatorReleaseFlushes() {
+        // 3-button chord so the fourth press extends instead of completing.
+        let engine = makeEngine([Chord(buttons: [.middle, .fourth, .fifth], actions: [.none])])
+        XCTAssertEqual(engine.intercept(.buttonDown(.middle), now: 0), .consume)
+        XCTAssertEqual(engine.intercept(.buttonDown(.fourth), now: 0.05), .consume)
+        XCTAssertEqual(engine.intercept(.buttonUp(.fourth), now: 0.10), .consume)   // capture continues
+        XCTAssertEqual(engine.intercept(.buttonUp(.middle), now: 0.15), .flush([.middle]))  // held is [middle] — fourth already left
+    }
+
     func testTimeoutFlushesOnNextEvent() {
         let engine = makeEngine([Chord(buttons: [.middle, .fourth],
                                        actions: [.click(.left, [])], timeout: 0.3)])

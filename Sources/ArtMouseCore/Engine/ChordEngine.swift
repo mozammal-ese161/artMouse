@@ -12,9 +12,11 @@ public protocol ChordCoordinating: AnyObject {
 }
 
 /// Multi-button chord FSM. Lazy timeout: evaluated on every intercept — no
-/// timer. `.fire`/`.flush` decisions are executed by the router (Task 8):
-/// fire performs the actions; flush performs the held buttons' normal
-/// bindings and re-sends the triggering event through intercept once.
+/// timer. Releasing the initiator abandons the chord (flush all held);
+/// releasing non-initiator buttons continues the capture. `.fire`/`.flush`
+/// decisions are executed by the router (Task 8): fire performs the actions;
+/// flush performs the held buttons' normal bindings and re-sends the
+/// triggering event through intercept once.
 public final class ChordEngine: ChordCoordinating {
     private struct Capture {
         let first: ButtonID
@@ -90,7 +92,9 @@ public final class ChordEngine: ChordCoordinating {
 
     private func handleUp(_ b: ButtonID, capture: inout Capture) -> ChordDecision {
         guard capture.held.contains(b) else { return .route }
-        if b == capture.first && capture.held.count == 1 {
+        if b == capture.first {
+            // The initiator released: the chord is abandoned — flush everything
+            // so the held buttons' normal bindings fire (Task 8 order).
             let flushed = capture.held
             self.capture = nil
             return .flush(flushed)
