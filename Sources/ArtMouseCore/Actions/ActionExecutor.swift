@@ -26,6 +26,9 @@ public final class ActionExecutor: ActionExecuting {
     /// Weak for the same cycle reason: the wheel-mode controller is the scroll
     /// controller, which lives alongside the executor in the router graph (Task 8).
     private weak var wheel: WheelModeSwitching?
+    /// Weak for the same cycle reason: the snapping controller is engine-owned
+    /// state assembled alongside the executor (Task 4).
+    private weak var snapping: SnappingPerforming?
     /// Scroll events posted by the `.scroll` arm, recorded for tests — asserting
     /// poster ownership against a live CGEventPoster would inject real HID input.
     /// No public API added.
@@ -35,11 +38,13 @@ public final class ActionExecutor: ActionExecuting {
                 workspace: WorkspaceOpening = NSWorkspaceOpener(),
                 cursor: CursorCoordinating? = nil,
                 wheel: WheelModeSwitching? = nil,
+                snapping: SnappingPerforming? = nil,
                 cursorLocation: @escaping () -> CGPoint = { CGEvent(source: nil)?.location ?? .zero }) {
         self.poster = poster
         self.workspace = workspace
         self.cursor = cursor
         self.wheel = wheel
+        self.snapping = snapping
         self.cursorLocation = cursorLocation
     }
 
@@ -53,8 +58,8 @@ public final class ActionExecutor: ActionExecuting {
             performAction(action)   // Task 10 replaces this stub dispatch
         case .macro:
             break   // MacroEngine routing lands in Task 3
-        case .snapping:
-            break   // SnappingController wiring lands in Task 4
+        case .snapping(let op):
+            snapping?.perform(op)
         case .scroll(let spec):
             performScroll(spec)
         }

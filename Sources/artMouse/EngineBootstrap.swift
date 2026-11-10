@@ -48,11 +48,15 @@ final class EngineBootstrap {
         let emitter = ScrollEmitter(poster: poster)
         let scrollController = ScrollController(store: store, emitter: emitter)
         let chordEngine = ChordEngine(settings: store)
-        let executor = ActionExecutor(poster: poster, cursor: cursorController, wheel: scrollController)
-        let clickLock = ClickLockCoordinator(executor: executor)
         // Button-bound macros share the same poster so their synthetic keys
         // and clicks carry the private-source tag too (loop protection).
         let macroEngine = MacroEngine(poster: poster)
+        // Snapping shares the poster for the same loop-protection reason: the
+        // warp-and-click events it posts must carry the private-source tag.
+        let snappingController = SnappingController(finder: AXDefaultButtonFinder(), poster: poster)
+        let executor = ActionExecutor(poster: poster, cursor: cursorController, wheel: scrollController,
+                                      snapping: snappingController)
+        let clickLock = ClickLockCoordinator(executor: executor)
         let router = EventRouter(settings: store, executor: executor,
                                  clickLock: clickLock, cursor: cursorController,
                                  scroll: scrollController, chords: chordEngine,
@@ -92,6 +96,8 @@ final class EngineBootstrap {
         // router's macroHeldButtons are mutated only by run/stop on the
         // event-tap callback path; MacroEngine's spawned Tasks only post
         // events and sleep, hopping their finishTask back to the main actor.
+        // SnappingController is stateless (it reads the AX frame and posts on
+        // each call), so it is safe from any of those paths.
         // Every timer is scheduled on the current
         // (main) run loop, matching Timer.scheduledTimer(on: .main, ...)
         // semantics; CGEvent tap callbacks are delivered on that same main run
