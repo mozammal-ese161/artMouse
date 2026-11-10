@@ -6,9 +6,10 @@ import AppKit
 @preconcurrency import ArtMouseCore
 import Combine
 
-/// Assembles the engine stack and owns its timers. The SettingsStore and
-/// DeviceManager are created by AppDelegate and shared with the UI (Task 16).
-/// Main-thread confined: start() must only ever be called from the main queue
+/// Assembles the engine stack and owns its timers. The SettingsStore,
+/// DeviceManager, and AppWatcher are created by AppDelegate and shared with
+/// the UI (Tasks 16 and 8); the bootstrap starts the watcher here. Main-thread
+/// confined: start() must only ever be called from the main queue
 /// (see the calling discipline below), and PermissionsController is
 /// @MainActor since Task 16's UI observes it.
 @Observable
@@ -22,7 +23,7 @@ final class EngineBootstrap {
     private var deviceTimer: Timer?
     /// 8 ms cadence pump for the scroll emitter (Task 8).
     private var emitterDriver: Timer?
-    private var appWatcher: AppWatcher?
+    private let appWatcher: AppWatcher
     /// Strong anchor: the executor holds snapping weakly (cycle hygiene), so
     /// the bootstrap owns the controller's lifetime. A class-level `let` cannot
     /// be assigned from start(), and the poster it shares is created there —
@@ -36,22 +37,22 @@ final class EngineBootstrap {
     /// controller where nothing read it).
     public private(set) var safetyRestoreWarning: String?
 
-    init(devices: DeviceManager, permissions: PermissionsController) {
+    init(devices: DeviceManager, permissions: PermissionsController, appWatcher: AppWatcher) {
         self.permissions = permissions
         self.devices = devices
+        self.appWatcher = appWatcher
     }
 
     func start(store: SettingsStore) {
         // Frontmost-app tracking (Task 18): NSWorkspace activation
         // notifications record which bundle ID is frontmost. Phase 3 Task 5's
-        // per-app profiles consume it, so ONE watcher is constructed here and
-        // shared with the router and both controllers — they must read the
-        // same activation state, not stale copies. The notification block
-        // hops to the main queue (see the calling discipline below), so the
-        // unsynchronized `frontmostBundleID` write stays on the same thread
-        // as everything else here. (Task 8 moves ownership to AppDelegate.)
-        let appWatcher = AppWatcher()
-        self.appWatcher = appWatcher
+        // per-app profiles consume it, so ONE watcher — constructed by
+        // AppDelegate (Task 8) and shared with the UI, the router, and both
+        // controllers — is started here; they must read the same activation
+        // state, not stale copies. The notification block hops to the main
+        // queue (see the calling discipline below), so the unsynchronized
+        // `frontmostBundleID` write stays on the same thread as everything
+        // else here.
         appWatcher.start()
 
         let cursorController = CursorController(store: store, watcher: appWatcher)

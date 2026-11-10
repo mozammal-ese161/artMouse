@@ -23,6 +23,8 @@ struct SettingsWindow: View {
                     .tabItem { Text("Scroll Bindings") }
                 ChordsTabView(model: model)
                     .tabItem { Text("Chords") }
+                AppsTabView(model: model)
+                    .tabItem { Text("Apps") }
                 CursorTabView(model: model)
                     .tabItem { Text("Cursor") }
                 DevicesTabView(model: model)

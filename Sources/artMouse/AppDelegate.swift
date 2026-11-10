@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var bootstrap: EngineBootstrap?
     private var store: SettingsStore?
     private var devices: DeviceManager?
+    private var appWatcher: AppWatcher?
     private var appModel: AppModel?
     private var settingsWindow: NSWindow?
 
@@ -37,13 +38,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let store = SettingsStore(directory: directory)
         let devices = DeviceManager(enumerator: IOKitDeviceEnumerator())
-        self.store = store
-        self.devices = devices
-        appModel = AppModel(store: store, permissions: permissions, devices: devices)
+        // One AppWatcher shared by the engine stack AND the Settings UI (Task 8):
+        // the router and controllers must read the same activation state the
+        // Apps tab's "Add Frontmost App" reports. Retained here so the weak
+        // reference in AppModel stays alive in safe mode too; the bootstrap
+        // starts it (engine path only — activation tracking is an engine
+        // concern, and AppModel's frontmostBundleID stays nil without it).
+        let appWatcher = AppWatcher()
+        self.appWatcher = appWatcher
+        appModel = AppModel(store: store, permissions: permissions, devices: devices,
+                            watcher: appWatcher)
 
         if BootstrapDecision.shouldRunEngine(arguments: CommandLine.arguments,
                                              flagsAtLaunch: BootstrapDecision.currentFlags()) {
-            let bootstrap = EngineBootstrap(devices: devices, permissions: permissions)
+            let bootstrap = EngineBootstrap(devices: devices, permissions: permissions,
+                                            appWatcher: appWatcher)
             bootstrap.start(store: store)
             self.bootstrap = bootstrap
         }

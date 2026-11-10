@@ -6,15 +6,22 @@ final class AppModel {
     private let store: SettingsStore
     let permissions: PermissionsController
     let devices: DeviceManager
+    /// Owned by AppDelegate and EngineBootstrap (which starts it); the model
+    /// only reads the frontmost bundle ID for "Add Frontmost App".
+    private weak var watcher: AppWatcher?
 
-    init(store: SettingsStore, permissions: PermissionsController, devices: DeviceManager) {
+    init(store: SettingsStore, permissions: PermissionsController, devices: DeviceManager,
+         watcher: AppWatcher? = nil) {
         self.store = store
         self.permissions = permissions
         self.devices = devices
         devices.refresh()
+        self.watcher = watcher
     }
 
     var settings: GlobalSettings { store.settings }
+
+    var frontmostBundleID: String? { watcher?.frontmostBundleID }
 
     /// Load warnings from the store; surfaced in the Settings UI so a
     /// malformed settings.json is visible to the user (spec §7, Review Focus 2).
@@ -161,6 +168,40 @@ final class AppModel {
     func removeChord(_ id: UUID) {
         var settings = store.settings
         settings.chords.removeAll { $0.id == id }
+        store.settings = settings
+        save()
+    }
+
+    // Per-application profiles (Phase 3 Task 8). Matching stays bundle-ID
+    // exact, so an empty ID would shadow nothing and a duplicate would create
+    // an ambiguous row that can never both apply — both are refused.
+
+    func addAppProfile(bundleID: String, name: String) {
+        guard !bundleID.isEmpty else { return }
+        var settings = store.settings
+        guard !settings.appProfiles.contains(where: { $0.bundleID == bundleID }) else { return }
+        settings.appProfiles.append(AppProfile(bundleID: bundleID, name: name))
+        store.settings = settings
+        save()
+    }
+
+    func addFrontmostAppProfile() {
+        guard let bundleID = frontmostBundleID else { return }
+        addAppProfile(bundleID: bundleID, name: bundleID)
+    }
+
+    func removeAppProfile(_ id: UUID) {
+        var settings = store.settings
+        settings.appProfiles.removeAll { $0.id == id }
+        store.settings = settings
+        save()
+    }
+
+    func updateAppProfile(_ profile: AppProfile) {
+        var settings = store.settings
+        if let index = settings.appProfiles.firstIndex(where: { $0.id == profile.id }) {
+            settings.appProfiles[index] = profile
+        }
         store.settings = settings
         save()
     }
