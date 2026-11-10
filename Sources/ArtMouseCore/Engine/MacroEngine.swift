@@ -50,9 +50,14 @@ public final class MacroEngine {
     /// Cancels any running program for the button and starts a new one.
     public func run(program: MacroProgram, for button: ButtonID) {
         stop(for: button)
+        // finishTask mutates the task dictionaries, so it hops back to the
+        // main queue where run/stop live (the calling-discipline contract);
+        // the spawned Task itself only posts events and sleeps.
         tasks[button] = Task { [weak self] in
             await self?.runLoop(program: program)
-            self?.finishTask(for: button)
+            Task { @MainActor [weak self] in
+                self?.finishTask(for: button)
+            }
         }
     }
 

@@ -1,5 +1,6 @@
 import XCTest
 import CoreGraphics
+import Foundation
 @testable import ArtMouseCore
 
 final class ActionExecutorTests: XCTestCase {
@@ -107,8 +108,25 @@ final class ActionExecutorTests: XCTestCase {
     }
 }
 
+/// Thread-safe: MacroEngine tests spawn real Tasks that append concurrently
+/// (unsynchronized Array.append is a SIGSEGV-grade race). `events` returns a
+/// snapshot under the lock; reading a stale copy is fine for every caller.
 final class RecordingPoster: EventPosting {
-    private(set) var events: [CGEvent] = []
-    func post(_ event: CGEvent) { events.append(event) }
-    func clear() { events.removeAll() }
+    internal let lock = NSLock()
+    private var storedEvents: [CGEvent] = []
+    var events: [CGEvent] {
+        lock.lock()
+        defer { lock.unlock() }
+        return storedEvents
+    }
+    func post(_ event: CGEvent) {
+        lock.lock()
+        storedEvents.append(event)
+        lock.unlock()
+    }
+    func clear() {
+        lock.lock()
+        storedEvents.removeAll()
+        lock.unlock()
+    }
 }
