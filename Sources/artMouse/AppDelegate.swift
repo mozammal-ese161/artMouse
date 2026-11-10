@@ -46,13 +46,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // concern, and AppModel's frontmostBundleID stays nil without it).
         let appWatcher = AppWatcher()
         self.appWatcher = appWatcher
+        // Device log and analyzer store exist once, beside the watcher, so the
+        // Settings UI (Device Analyzer sheet) and the engine pump read and
+        // write the SAME instances on both paths — the bootstrap block below
+        // gates only the engine. The log file is a sibling of settings.json
+        // (SettingsStore.directory).
+        let hidLog = HIDEventLog(fileURL: store.directory.appendingPathComponent("devices.log"))
+        let hidAnalyzer = HIDAnalyzerStore()
         appModel = AppModel(store: store, permissions: permissions, devices: devices,
-                            watcher: appWatcher)
+                            watcher: appWatcher, hidLog: hidLog, hidAnalyzer: hidAnalyzer)
 
         if BootstrapDecision.shouldRunEngine(arguments: CommandLine.arguments,
                                              flagsAtLaunch: BootstrapDecision.currentFlags()) {
             let bootstrap = EngineBootstrap(devices: devices, permissions: permissions,
-                                            appWatcher: appWatcher)
+                                            appWatcher: appWatcher,
+                                            hidLog: hidLog, hidAnalyzer: hidAnalyzer)
             bootstrap.start(store: store)
             self.bootstrap = bootstrap
         }

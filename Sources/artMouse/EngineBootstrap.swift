@@ -34,6 +34,14 @@ final class EngineBootstrap {
     /// button-up that stops a hold-mode loop would otherwise never arrive,
     /// leaving the loop repeating at its 10 ms interval floor forever).
     private var macroEngine: MacroEngine?
+    /// Raw HID observation path (Phase 4): strong anchor, same idiom as
+    /// `macroEngine` — the pump routes into the router created in start(), so
+    /// a class-level `let` cannot hold it.
+    private var hidPump: HIDEventPump?
+    /// Shared with the Settings UI (created by AppDelegate): the pump logs
+    /// every observation and the Device Analyzer sheet reads the same store.
+    private let hidLog: HIDEventLog?
+    private let hidAnalyzer: HIDAnalyzerStore?
     private var cancellable: AnyCancellable?
 
     /// Safety-restore warning mirrored from the cursor controller on every
@@ -42,10 +50,13 @@ final class EngineBootstrap {
     /// controller where nothing read it).
     public private(set) var safetyRestoreWarning: String?
 
-    init(devices: DeviceManager, permissions: PermissionsController, appWatcher: AppWatcher) {
+    init(devices: DeviceManager, permissions: PermissionsController, appWatcher: AppWatcher,
+         hidLog: HIDEventLog? = nil, hidAnalyzer: HIDAnalyzerStore? = nil) {
         self.permissions = permissions
         self.devices = devices
         self.appWatcher = appWatcher
+        self.hidLog = hidLog
+        self.hidAnalyzer = hidAnalyzer
     }
 
     func start(store: SettingsStore) {
@@ -117,6 +128,26 @@ final class EngineBootstrap {
                     router?.clearMacroHolds()
                 }
             }
+
+        // Raw HID observation (Phase 4): value callbacks hop to main inside
+        // the glue, so the pump consumes on the main run loop like the tap
+        // path. Settings lookups are read per observation through the store
+        // (live settings).
+        let hidPump = HIDEventPump(
+            observer: IOKitHIDValueObserver(),
+            resolve: { [weak store] vendorID, productID in
+                guard let settings = store?.settings else { return .observe(profile: nil) }
+                if settings.isDeviceDisabled(vendorID: vendorID, productID: productID) {
+                    return .disabled
+                }
+                return .observe(profile: settings.deviceProfile(matchingVendor: vendorID,
+                                                                productID: productID))
+            },
+            router: router,
+            log: hidLog,
+            analyzer: hidAnalyzer)
+        hidPump.start()
+        self.hidPump = hidPump
 
         // Calling discipline: CursorController state (pendingRestore,
         // precisionActive, safetyRestoreWarning) is unsynchronized, so the tick

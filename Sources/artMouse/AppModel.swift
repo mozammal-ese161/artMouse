@@ -9,14 +9,23 @@ final class AppModel {
     /// Owned by AppDelegate and EngineBootstrap (which starts it); the model
     /// only reads the frontmost bundle ID for "Add Frontmost App".
     private weak var watcher: AppWatcher?
+    /// Shared with the engine's HID pump (Device Analyzer sheet, Phase 4):
+    /// created ONCE in AppDelegate so UI and engine observe the same stores.
+    /// Optional with a nil default because the model is also constructed in
+    /// tests and previews without the device pipeline.
+    let deviceLog: HIDEventLog?
+    let hidAnalyzer: HIDAnalyzerStore?
 
     init(store: SettingsStore, permissions: PermissionsController, devices: DeviceManager,
-         watcher: AppWatcher? = nil) {
+         watcher: AppWatcher? = nil, hidLog: HIDEventLog? = nil,
+         hidAnalyzer: HIDAnalyzerStore? = nil) {
         self.store = store
         self.permissions = permissions
         self.devices = devices
         devices.refresh()
         self.watcher = watcher
+        self.deviceLog = hidLog
+        self.hidAnalyzer = hidAnalyzer
     }
 
     var settings: GlobalSettings { store.settings }

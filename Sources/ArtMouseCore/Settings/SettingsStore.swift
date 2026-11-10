@@ -14,6 +14,9 @@ public final class SettingsStore {
     public private(set) var lastLoadWarnings: [String] = []
     public var settings: GlobalSettings
 
+    /// Directory containing settings.json; the device log is a sibling.
+    public var directory: URL { fileURL.deletingLastPathComponent() }
+
     private let fileURL: URL
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
