@@ -182,6 +182,13 @@ final class AppModel {
         save()
     }
 
+    /// Global trackball convention (spec A.4): thumb-operated trackballs
+    /// report horizontal deltas mirrored; this flips the sign at the engine.
+    func setTrackballFlip(_ flipped: Bool) {
+        store.settings.trackballHorizontalFlip = flipped
+        save()
+    }
+
     func addChord() {
         var settings = store.settings
         settings.chords.append(Chord(buttons: [.middle, .fourth], actions: []))

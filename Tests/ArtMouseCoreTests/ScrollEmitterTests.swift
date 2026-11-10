@@ -158,4 +158,92 @@ final class ScrollEmitterTests: XCTestCase {
         XCTAssertEqual(poster.events.count, 0)
         XCTAssertFalse(emitter.isActive)
     }
+
+    // MARK: Free-spin momentum (Phase 4)
+
+    // Coast sequence: after 0.12 s of input silence the primed momentum
+    // emits the full linesPerTick, then each 16 ms step decays by
+    // decayPercent until the next step falls below the 0.05-line floor —
+    // strictly decreasing, then idle, never resurrecting itself.
+    func testMomentumCoastStartsAfterInputSilenceAndDecays() {
+        let emitter = makeEmitter()
+        emitter.primeMomentum(direction: .down, linesPerTick: 3, decayPercent: 50,
+                              maxLines: 100, now: now)
+        emitter.tick(now: 0.05)                                // inside the gap: nothing
+        XCTAssertEqual(poster.events.count, 0)
+        emitter.tick(now: 0.13)                                // gap elapsed: first coast step
+        XCTAssertEqual(poster.events.count, 1)
+        emitter.tick(now: 0.15)                                // step 2: 1.5
+        emitter.tick(now: 0.17)                                // step 3: 0.75
+        emitter.tick(now: 0.19)                                // step 4: 0.375
+        emitter.tick(now: 0.21)                                // step 5: 0.1875
+        emitter.tick(now: 0.23)                                // next decay 0.046875 < floor → idle
+        let expected: [Double] = [-3, -1.5, -0.75, -0.375, -0.1875, -0.09375]
+        let amounts = poster.events.map { fixedPtLines($0) }
+        XCTAssertEqual(amounts.count, expected.count)
+        for (index, value) in amounts.enumerated() {
+            XCTAssertEqual(value, expected[index], accuracy: 1e-9, "coast step \(index)")
+        }
+        for pair in zip(amounts, amounts.dropFirst()) {
+            XCTAssertLessThan(abs(pair.1), abs(pair.0))        // strictly decaying magnitude
+        }
+        XCTAssertFalse(emitter.isActive)                       // decayed past the floor → idle
+        emitter.tick(now: 1.0)                                 // a spent coast must not restart
+        XCTAssertEqual(poster.events.count, expected.count)
+    }
+
+    // Review Focus 5: momentum is constant-mode-only. While a keys run owns
+    // the emitter the primed momentum must never coast over it — not during
+    // the run, and not after the release gap drops the emitter back to idle
+    // (stop-equivalent idle transitions discard the primed state).
+    func testMomentumNeverCoastsUnderAnotherOwner() {
+        let emitter = makeEmitter()
+        emitter.beginKeys(WheelKeyEmulation(keyCode: KeyCodes.f), direction: .down, now: now)
+        emitter.primeMomentum(direction: .down, linesPerTick: 3, decayPercent: 50,
+                              maxLines: 100, now: now)
+        emitter.tick(now: 0.05)                                // keys run open: coast refused
+        XCTAssertEqual(poster.events.filter { $0.type == .scrollWheel }.count, 0)
+        emitter.tick(now: 1.0)                                 // release gap exceeded → key up → idle
+        XCTAssertEqual(poster.events.filter { $0.type == .scrollWheel }.count, 0)
+        emitter.tick(now: 1.5)                                 // idle again, but no primed momentum left
+        XCTAssertEqual(poster.events.filter { $0.type == .scrollWheel }.count, 0)
+        XCTAssertEqual(poster.events.filter { $0.type == .keyUp }.count, 1)   // keys still behave: F released
+    }
+
+    // The coast is capped: total posted lines must never exceed maxLines
+    // plus the first step (the step that crosses the cap still posts whole).
+    func testMomentumCappedByMaxLines() {
+        let emitter = makeEmitter()
+        emitter.primeMomentum(direction: .down, linesPerTick: 3, decayPercent: 95,
+                              maxLines: 5, now: now)
+        for t in stride(from: 0.13, through: 2.0, by: 0.02) { emitter.tick(now: t) }
+        let totalFixedPt = poster.events.reduce(Int64(0)) {
+            $0 + $1.getIntegerValueField(.scrollWheelEventFixedPtDeltaAxis1)
+        }
+        XCTAssertLessThanOrEqual(abs(totalFixedPt), Int64(8 * 65536))   // ≤ (5 + 3) lines of fixed-pt units
+        XCTAssertEqual(poster.events.count, 2)                 // 3 + 2.85 = 5.85 ≥ cap → idle
+        XCTAssertFalse(emitter.isActive)
+    }
+
+    // noteInput cancels a live coast AND its primed state: only a fresh
+    // primeMomentum restarts the sequence.
+    func testNewInputCancelsLiveCoast() {
+        let emitter = makeEmitter()
+        emitter.primeMomentum(direction: .down, linesPerTick: 3, decayPercent: 50,
+                              maxLines: 100, now: now)
+        emitter.tick(now: 0.13)                                // coast begins, first step posts
+        XCTAssertEqual(poster.events.count, 1)
+        emitter.noteInput(now: 0.14)                           // real wheel tick lands
+        emitter.tick(now: 0.30)                                // silence again, but no fresh prime
+        emitter.tick(now: 1.0)
+        XCTAssertEqual(poster.events.count, 1, "cancelled coast must not restart without a prime")
+        XCTAssertFalse(emitter.isActive)
+    }
+
+    /// Line amount of a recorded scroll post read off the 16.16 fixed-point
+    /// delta field — the emitter carries fractional coast steps there, and
+    /// the line fields truncate.
+    private func fixedPtLines(_ event: CGEvent) -> Double {
+        Double(event.getIntegerValueField(.scrollWheelEventFixedPtDeltaAxis1)) / 65536.0
+    }
 }

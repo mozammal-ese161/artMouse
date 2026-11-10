@@ -60,6 +60,12 @@ public final class ScrollController: ScrollControlling, WheelModeSwitching {
             direction = direction.flipped
         }
 
+        // Trackball convention (global option, spec A.4): thumb-operated
+        // trackballs report horizontal deltas mirrored; flip the sign.
+        if axis == .horizontal && store.settings.trackballHorizontalFlip {
+            direction = direction.flipped
+        }
+
         // 1. Wheel→keys takes absolute precedence.
         if let keys = profile.keyEmulation {
             if autoDirection != nil { emitter.stop(); autoDirection = nil }   // fix round 1: end a live auto
@@ -89,6 +95,16 @@ public final class ScrollController: ScrollControlling, WheelModeSwitching {
             if autoDirection != nil { emitter.stop(); autoDirection = nil }   // fix round 1: end a live auto
             emitter.emitOnce(direction: direction, lines: lines)
             emitter.noteInput(now: clock())
+            // Free-spin momentum arms here only: constant mode is the one
+            // mode that intercepts and thus eats the OS's own momentum ticks
+            // (Review Focus 5), so its coast can never double with one.
+            if profile.freeSpinMomentum {
+                let decay = Int(Double(profile.momentumDecayPercent).clamped(10...95))
+                let maxTicks = Int(Double(profile.momentumMaxTicks).clamped(1...100))
+                emitter.primeMomentum(direction: direction, linesPerTick: lines,
+                                      decayPercent: decay,
+                                      maxLines: lines * Double(maxTicks), now: clock())
+            }
             return .intercept
         case .auto:
             if autoDirection != direction || !emitter.isActive {

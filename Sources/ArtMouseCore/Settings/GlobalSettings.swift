@@ -41,6 +41,10 @@ public struct GlobalSettings: Codable, Equatable {
     public var appProfiles: [AppProfile]
     public var deviceProfiles: [DeviceProfile]
     public var disabledDeviceKeys: [String]
+    /// Global trackball convention (spec A.4): thumb-operated trackballs
+    /// report horizontal deltas mirrored; true flips the sign of every
+    /// derived horizontal scroll direction.
+    public var trackballHorizontalFlip: Bool
 
     public static let `default` = GlobalSettings(
         schemaVersion: 1,
@@ -61,7 +65,8 @@ public struct GlobalSettings: Codable, Equatable {
         chords: [],
         appProfiles: [],
         deviceProfiles: [],
-        disabledDeviceKeys: []
+        disabledDeviceKeys: [],
+        trackballHorizontalFlip: false
     )
 }
 
@@ -88,6 +93,8 @@ extension GlobalSettings {
         // Phase 4 fields: absent in earlier files → empty defaults (backward compat).
         deviceProfiles = try c.decodeIfPresent([DeviceProfile].self, forKey: .deviceProfiles) ?? []
         disabledDeviceKeys = try c.decodeIfPresent([String].self, forKey: .disabledDeviceKeys) ?? []
+        // Phase 4 trackball option: absent in earlier files → unflipped (backward compat).
+        trackballHorizontalFlip = try c.decodeIfPresent(Bool.self, forKey: .trackballHorizontalFlip) ?? false
     }
 }
 

@@ -192,4 +192,105 @@ final class ScrollControllerTests: XCTestCase {
         XCTAssertEqual(controller.disposition(forScroll: .vertical, ticks: 1), .intercept)
         XCTAssertEqual(poster.events[0].getDoubleValueField(.scrollWheelEventDeltaAxis1), 9, accuracy: 1e-9)
     }
+
+    // Phase 4 (spec A.4): thumb-operated trackballs report horizontal deltas
+    // mirrored; the global flip reverses the derived horizontal direction —
+    // here in constant mode, where a .right tick emits as .left — while the
+    // vertical axis stays untouched.
+    func testTrackballFlipReversesHorizontalDirection() {
+        let store = makeStore(profiles: [WheelModeProfile(name: "Default", mode: .constant, lines: 4)])
+        var settings = store.settings
+        settings.trackballHorizontalFlip = true
+        store.settings = settings
+        let emitter = ScrollEmitter(poster: poster)
+        let controller = ScrollController(store: store, emitter: emitter)
+        XCTAssertEqual(controller.disposition(forScroll: .horizontal, ticks: 2), .intercept)
+        XCTAssertEqual(poster.events.count, 1)
+        XCTAssertLessThan(poster.events[0].getDoubleValueField(.scrollWheelEventDeltaAxis2), 0)   // .left
+        XCTAssertEqual(controller.disposition(forScroll: .vertical, ticks: 2), .intercept)
+        XCTAssertEqual(poster.events.count, 2)
+        XCTAssertGreaterThan(poster.events[1].getDoubleValueField(.scrollWheelEventDeltaAxis1), 0)   // up stays up
+    }
+
+    // Same flip through the acceleration channel (testHorizontalReverse-
+    // OnlyAffectsHorizontal's assertion shape): the flip lands before mode
+    // dispatch, so the scale sign carries it too.
+    func testTrackballFlipAppliesToAccelerationScale() {
+        let store = makeStore(profiles: [WheelModeProfile(name: "Default")])
+        var settings = store.settings
+        settings.trackballHorizontalFlip = true
+        store.settings = settings
+        let controller = ScrollController(store: store, emitter: ScrollEmitter(poster: poster))
+        XCTAssertEqual(controller.disposition(forScroll: .horizontal, ticks: 2),
+                       .scale(vertical: 1.0, horizontal: -1.0))
+    }
+
+    // Review Focus 5: freeSpinMomentum only arms the coast from the constant
+    // arm — an acceleration profile with the flag on passes ticks through the
+    // scale and the emitter records nothing, even well past the coast gap.
+    func testMomentumPrimesOnlyInConstantMode() {
+        var now = 0.0
+        let store = makeStore(profiles: [WheelModeProfile(name: "Default", sensFactor: 2.0,
+                                                          acceleration: 1.0, freeSpinMomentum: true)])
+        let emitter = ScrollEmitter(poster: poster)
+        let controller = ScrollController(store: store, emitter: emitter, clock: { now })
+        XCTAssertEqual(controller.disposition(forScroll: .vertical, ticks: 3),
+                       .scale(vertical: 4.0, horizontal: 1.0))   // passthrough scale, no intercept
+        now = 0.5
+        controller.pumpEmitter()                                 // gap long elapsed
+        XCTAssertEqual(poster.events.count, 0, "acceleration mode must not prime a coast")
+        XCTAssertFalse(emitter.isActive)
+    }
+
+    // The constant arm is the only priming site: a free-spin Constant profile
+    // coasts after the 0.12 s input silence with the profile's decay values.
+    func testConstantModePrimesCoastAfterSilence() {
+        var now = 0.0
+        let store = makeStore(profiles: [WheelModeProfile(name: "Default", mode: .constant, lines: 3,
+                                                          freeSpinMomentum: true,
+                                                          momentumDecayPercent: 50)])
+        let emitter = ScrollEmitter(poster: poster)
+        let controller = ScrollController(store: store, emitter: emitter, clock: { now })
+        XCTAssertEqual(controller.disposition(forScroll: .vertical, ticks: 1), .intercept)
+        XCTAssertEqual(poster.events.count, 1)                   // the constant line itself
+        now = 0.13
+        controller.pumpEmitter()                                 // gap elapsed → coast step 1
+        XCTAssertEqual(poster.events.count, 2)
+        XCTAssertEqual(Double(poster.events[1].getIntegerValueField(.scrollWheelEventFixedPtDeltaAxis1)) / 65536.0,
+                       3, accuracy: 1e-9)                        // full linesPerTick again (.up tick → +3)
+    }
+
+    // And with the flag off (the Phase 3 default) a Constant profile never
+    // coasts: one tick, one post, nothing after the silence.
+    func testConstantModeWithoutFreeSpinNeverCoasts() {
+        var now = 0.0
+        let store = makeStore(profiles: [WheelModeProfile(name: "Default", mode: .constant, lines: 3)])
+        let emitter = ScrollEmitter(poster: poster)
+        let controller = ScrollController(store: store, emitter: emitter, clock: { now })
+        XCTAssertEqual(controller.disposition(forScroll: .vertical, ticks: 1), .intercept)
+        now = 1.0
+        controller.pumpEmitter()
+        XCTAssertEqual(poster.events.count, 1, "freeSpinMomentum defaults off: no coast")
+    }
+
+    // Wheel-mode rotation's emitter.stop() must kill a live coast AND its
+    // primed state — the free-spin sequence never survives a switch.
+    func testSwitchWheelModeStopsRunningCoast() {
+        var now = 0.0
+        let store = makeStore(profiles: [WheelModeProfile(name: "A", mode: .constant, lines: 3,
+                                                          freeSpinMomentum: true),
+                                         WheelModeProfile(name: "B")])
+        let emitter = ScrollEmitter(poster: poster)
+        let controller = ScrollController(store: store, emitter: emitter, clock: { now })
+        XCTAssertEqual(controller.disposition(forScroll: .vertical, ticks: 1), .intercept)
+        now = 0.13
+        controller.pumpEmitter()                       // gap elapsed → coast runs under profile A
+        XCTAssertEqual(poster.events.count, 2)
+        XCTAssertTrue(emitter.isActive)
+        controller.activateNextWheelMode()             // rotation → emitter.stop()
+        now = 1.0
+        controller.pumpEmitter()
+        XCTAssertEqual(poster.events.count, 2, "rotation must end the coast for good")
+        XCTAssertFalse(emitter.isActive)
+    }
 }

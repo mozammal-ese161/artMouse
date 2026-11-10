@@ -59,6 +59,22 @@ struct WheelProfileEditorView: View {
                         onUpdate(copy(intervalMS: Int($0)))
                     }
                 }
+                // Free-spin momentum is a constant-mode feature only: it is
+                // the one mode that eats the OS's own momentum ticks.
+                if profile.mode == .constant {
+                    Toggle("Free-spin momentum", isOn: Binding(
+                        get: { profile.freeSpinMomentum },
+                        set: { onUpdate(copy(freeSpinMomentum: $0)) }))
+                        .toggleStyle(.checkbox)
+                    if profile.freeSpinMomentum {
+                        numericField("Coast decay (%)", value: Double(profile.momentumDecayPercent)) {
+                            onUpdate(copy(momentumDecayPercent: Int($0)))
+                        }
+                        numericField("Coast max (notches)", value: Double(profile.momentumMaxTicks)) {
+                            onUpdate(copy(momentumMaxTicks: Int($0)))
+                        }
+                    }
+                }
                 if profile.mode == .auto {
                     numericField("Auto interval (ms)", value: Double(profile.autoIntervalMS)) {
                         onUpdate(copy(autoIntervalMS: Int($0)))
@@ -108,5 +124,8 @@ struct WheelProfileEditorView: View {
     private func copy(smoothIntervalMS: Int) -> WheelModeProfile { var c = profile; c.smoothIntervalMS = smoothIntervalMS; return c }
     private func copy(autoIntervalMS: Int) -> WheelModeProfile { var c = profile; c.autoIntervalMS = autoIntervalMS; return c }
     private func copy(autoStopTicks: Int) -> WheelModeProfile { var c = profile; c.autoStopTicks = autoStopTicks; return c }
+    private func copy(freeSpinMomentum: Bool) -> WheelModeProfile { var c = profile; c.freeSpinMomentum = freeSpinMomentum; return c }
+    private func copy(momentumDecayPercent: Int) -> WheelModeProfile { var c = profile; c.momentumDecayPercent = momentumDecayPercent; return c }
+    private func copy(momentumMaxTicks: Int) -> WheelModeProfile { var c = profile; c.momentumMaxTicks = momentumMaxTicks; return c }
     private func copy(keyEmulation: WheelKeyEmulation?) -> WheelModeProfile { var c = profile; c.keyEmulation = keyEmulation; return c }
 }

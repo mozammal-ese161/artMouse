@@ -216,4 +216,34 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertThrowsError(try store.importData(Data("garbage".utf8)))
         XCTAssertEqual(store.settings.buttonBindings.count, 1)   // untouched
     }
+
+    // Phase 4 decode pin (Review Focus 4): a pre-Phase-4 wheel profile JSON
+    // (Phase 2 shape, no momentum keys) decodes with the inert momentum
+    // defaults — free-spin off, decay 70, cap 30 notches.
+    func testPhase2WheelProfileJSONDecodesWithMomentumDefaults() throws {
+        let json = """
+        {"id":"11111111-1111-1111-1111-111111111111","name":"w","mode":"constant",
+         "sensFactor":1.0,"acceleration":0.0,"lines":3.0,"intervalMS":100,
+         "reverseVertical":false,"reverseHorizontal":false,"smoothScroll":false,
+         "smoothIntervalMS":16,"autoIntervalMS":50,"autoStopTicks":5}
+        """
+        let profile = try JSONDecoder().decode(WheelModeProfile.self, from: Data(json.utf8))
+        XCTAssertFalse(profile.freeSpinMomentum)
+        XCTAssertEqual(profile.momentumDecayPercent, 70)
+        XCTAssertEqual(profile.momentumMaxTicks, 30)
+    }
+
+    // Phase 4 decode pin (Review Focus 4): the global trackball flip defaults
+    // to false on an old settings file that lacks the key (Phase 2 JSON shape,
+    // same fixture idiom as testAppProfilesDecodeDefaultEmpty).
+    func testTrackballFlipDefaultsFalseOnOldSettings() throws {
+        let phase3JSON = """
+        {"activeCursorSpeedProfileID":null,"buttonBindings":[],
+         "chords":[],"cursorSpeedProfiles":[{"acceleration":1,"id":"11111111-1111-1111-1111-111111111111","name":"Default","sensitivity":1600}],
+         "precisionProfileID":null,"schemaVersion":1,"scrollBindings":[],
+         "wheelModeProfiles":[]}
+        """
+        let settings = try SettingsStore.decode(Data(phase3JSON.utf8))
+        XCTAssertFalse(settings.trackballHorizontalFlip)
+    }
 }
