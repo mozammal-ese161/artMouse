@@ -141,4 +141,27 @@ final class AppModel {
         store.settings.activeWheelModeProfileID = id
         save()
     }
+
+    func addChord() {
+        var settings = store.settings
+        settings.chords.append(Chord(buttons: [.middle, .fourth], actions: []))
+        store.settings = settings
+        save()
+    }
+
+    func updateChord(_ chord: Chord) {
+        var settings = store.settings
+        if let index = settings.chords.firstIndex(where: { $0.id == chord.id }) {
+            settings.chords[index] = chord
+        }
+        store.settings = settings
+        save()
+    }
+
+    func removeChord(_ id: UUID) {
+        var settings = store.settings
+        settings.chords.removeAll { $0.id == id }
+        store.settings = settings
+        save()
+    }
 }

@@ -21,6 +21,8 @@ struct SettingsWindow: View {
                     .tabItem { Text("Wheel") }
                 ScrollBindingsTabView(model: model)
                     .tabItem { Text("Scroll Bindings") }
+                ChordsTabView(model: model)
+                    .tabItem { Text("Chords") }
                 CursorTabView(model: model)
                     .tabItem { Text("Cursor") }
                 DevicesTabView(model: model)
