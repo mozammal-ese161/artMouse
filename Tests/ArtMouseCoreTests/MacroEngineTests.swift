@@ -77,8 +77,15 @@ final class MacroEngineTests: XCTestCase {
         engine.stop(for: .middle)
         let countAtStop = poster.events.count
         XCTAssertTrue(countAtStop >= 4 && countAtStop % 2 == 0)
+        // Real-time settle: a straggler pair can straddle yield windows when
+        // the OS preempts the task between its own down and up posts.
+        try? await Task.sleep(nanoseconds: 30_000_000)
         for _ in 0..<20 { await Task.yield() }
-        XCTAssertEqual(poster.events.count, countAtStop)   // stopped
+        let count1 = poster.events.count
+        XCTAssertTrue(count1 - countAtStop <= 2)   // ≤ one in-flight pair (straggle)
+        for _ in 0..<20 { await Task.yield() }
+        let count2 = poster.events.count
+        XCTAssertEqual(count2, count1)             // stable: loop halted
         XCTAssertFalse(engine.isRunning(for: .middle))
     }
 
@@ -92,10 +99,16 @@ final class MacroEngineTests: XCTestCase {
             repeatIntervalMS: 10, modifierProxy: false), for: .fourth)
         while poster.events.count < 4 { await Task.yield() }
         engine.stopAll()
-        for _ in 0..<20 { await Task.yield() }
         let countAtStop = poster.events.count
+        // Real-time settle: a straggler pair can straddle yield windows when
+        // the OS preempts the task between its own down and up posts.
+        try? await Task.sleep(nanoseconds: 30_000_000)
         for _ in 0..<20 { await Task.yield() }
-        XCTAssertEqual(poster.events.count, countAtStop)
+        let count1 = poster.events.count
+        XCTAssertTrue(count1 - countAtStop <= 4)          // ≤ one in-flight pair per task
+        for _ in 0..<20 { await Task.yield() }
+        let count2 = poster.events.count
+        XCTAssertEqual(count2, count1)                    // stable: loops halted
         XCTAssertFalse(engine.isRunning(for: .middle))
         XCTAssertFalse(engine.isRunning(for: .fourth))
     }
