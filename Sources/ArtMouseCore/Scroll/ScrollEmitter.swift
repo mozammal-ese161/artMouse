@@ -35,6 +35,7 @@ public final class ScrollEmitter {
     }
 
     public func beginSmooth(direction: ScrollDirection, lines: Double, intervalMS: Int, now: Double) {
+        releaseKeysIfHeld()
         let interval = Double(intervalMS) / 1000.0
         let emissions = max(1, Int(80.0 / Double(intervalMS)))
         mode = .smooth(direction: direction, pendingLines: lines,
@@ -44,6 +45,7 @@ public final class ScrollEmitter {
 
     public func beginAuto(direction: ScrollDirection, lines: Double, intervalMS: Int,
                           stopAfterTicks: Int, now: Double) {
+        releaseKeysIfHeld()
         mode = .auto(direction: direction, lines: lines, interval: Double(intervalMS) / 1000.0,
                      due: now + Double(intervalMS) / 1000.0,
                      emissionsSinceInput: 0, stopAfterTicks: stopAfterTicks)
@@ -64,6 +66,7 @@ public final class ScrollEmitter {
     }
 
     public func beginKeys(_ keys: WheelKeyEmulation, direction: ScrollDirection, now: Double) {
+        releaseKeysIfHeld()
         mode = .keys(keys: keys, lastInput: now, nextRepeat: now + Self.keyRepeatInterval)
         postKey(keys, down: true)
         keysDown = true
@@ -105,6 +108,16 @@ public final class ScrollEmitter {
                 mode = .keys(keys: keys, lastInput: lastInput, nextRepeat: now + Self.keyRepeatInterval)
             }
         }
+    }
+
+    /// A begin* call that replaces a live `.keys` mode must not strand a held
+    /// key with no UP ever posted (fix round 1 review finding). The emitter
+    /// owns keysDown, so it releases the held key here — with the OLD keys
+    /// payload, before the caller rewrites `mode`.
+    private func releaseKeysIfHeld() {
+        guard keysDown, case .keys(let keys, _, _) = mode else { return }
+        postKey(keys, down: false)
+        keysDown = false
     }
 
     private func postScroll(direction: ScrollDirection, lines: Double) {

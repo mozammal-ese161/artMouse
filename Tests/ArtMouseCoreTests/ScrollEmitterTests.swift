@@ -99,4 +99,31 @@ final class ScrollEmitterTests: XCTestCase {
         XCTAssertEqual(poster.events.count, 2)
         XCTAssertEqual(poster.events[1].type, .keyUp)
     }
+
+    // Fix round 1 (review finding): begin* replaces `mode` unconditionally, so
+    // starting smooth/auto/keys while a key is held would strand it with no UP
+    // ever posted. The emitter owns keysDown, so it releases first.
+    func testBeginOverKeysReleasesHeldKey() {
+        let emitter = makeEmitter()
+        emitter.beginKeys(WheelKeyEmulation(keyCode: KeyCodes.f), direction: .up, now: now)
+        XCTAssertEqual(poster.events.count, 1)                     // down
+        now = 0.05
+        emitter.beginAuto(direction: .up, lines: 3, intervalMS: 50, stopAfterTicks: 2, now: now)
+        let up = poster.events.first(where: { $0.type == .keyUp })
+        XCTAssertNotNil(up)                                        // held F released
+        XCTAssertEqual(up.map { UInt64($0.getIntegerValueField(.keyboardEventKeycode)) }, KeyCodes.f)
+        XCTAssertTrue(emitter.isActive)                            // auto running
+    }
+
+    func testBeginKeysReleasesPreviousKey() {
+        let emitter = makeEmitter()
+        emitter.beginKeys(WheelKeyEmulation(keyCode: KeyCodes.f), direction: .up, now: now)
+        XCTAssertEqual(poster.events.count, 1)
+        now = 0.05
+        emitter.beginKeys(WheelKeyEmulation(keyCode: 40), direction: .up, now: now)
+        XCTAssertEqual(poster.events.count, 3)                     // down F, up F, down 40
+        XCTAssertEqual(poster.events[1].type, .keyUp)
+        XCTAssertEqual(UInt64(poster.events[1].getIntegerValueField(.keyboardEventKeycode)), KeyCodes.f)
+        XCTAssertEqual(UInt64(poster.events[2].getIntegerValueField(.keyboardEventKeycode)), 40)
+    }
 }
