@@ -1,4 +1,4 @@
-public enum ScrollAxis: Equatable {
+public enum ScrollAxis: Equatable, Codable {
     case vertical, horizontal
 }
 

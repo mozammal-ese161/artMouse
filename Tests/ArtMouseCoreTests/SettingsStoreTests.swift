@@ -87,4 +87,43 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(store.settings, .default)
         XCTAssertEqual(store.lastLoadWarnings.count, 1)
     }
+
+    func testPhase1SettingsJSONStillDecodes() throws {
+        // Exact shape a Phase 1 save produced: no wheel/chord/scroll fields.
+        let phase1JSON = """
+        {"activeCursorSpeedProfileID":null,"buttonBindings":[],
+         "cursorSpeedProfiles":[{"acceleration":1,"id":"11111111-1111-1111-1111-111111111111","name":"Default","sensitivity":1600}],
+         "precisionProfileID":null,"schemaVersion":1}
+        """
+        let settings = try SettingsStore.decode(Data(phase1JSON.utf8))
+        XCTAssertEqual(settings.buttonBindings, [])
+        XCTAssertEqual(settings.wheelModeProfiles.count, 0)   // defaulted, file not rewritten until next save
+        XCTAssertEqual(settings.chords, [])
+        XCTAssertEqual(settings.scrollBindings, [])
+    }
+
+    func testWheelModeProfileFallbackChain() {
+        var settings = GlobalSettings.default
+        XCTAssertNil(settings.activeWheelProfile)   // empty list
+
+        settings.wheelModeProfiles = [WheelModeProfile(name: "Fast")]
+        XCTAssertEqual(settings.activeWheelProfile?.name, "Fast")   // no named "Default" → first profile
+    }
+
+    func testActiveWheelProfilePrefersExplicitIDThenNamedDefaultThenFirst() {
+        var settings = GlobalSettings.default
+        let first = WheelModeProfile(name: "One")
+        let named = WheelModeProfile(name: "Default")
+        let other = WheelModeProfile(name: "Three")
+        settings.wheelModeProfiles = [first, named, other]
+
+        settings.activeWheelModeProfileID = other.id
+        XCTAssertEqual(settings.activeWheelProfile, other)
+
+        settings.activeWheelModeProfileID = UUID()          // dangling
+        XCTAssertEqual(settings.activeWheelProfile, named)  // named Default
+
+        settings.wheelModeProfiles = [first]                // named gone
+        XCTAssertEqual(settings.activeWheelProfile, first)  // first
+    }
 }
