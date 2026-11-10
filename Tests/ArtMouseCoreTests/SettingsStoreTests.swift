@@ -188,4 +188,32 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(settings.effectiveCursorProfile(for: "com.apple.Safari"), slow)
         XCTAssertEqual(settings.effectiveWheelProfile(for: "com.apple.Safari"), fast)
     }
+
+    // Task 9: export must reproduce the settings a fresh store decodes back.
+
+    func testExportImportRoundTrip() throws {
+        let dir = tempDirectory()
+        let store = SettingsStore(directory: dir)
+        var settings = GlobalSettings.default
+        settings.buttonBindings = [ButtonBinding(button: .fifth, actions: [.open(.path("/tmp"))])]
+        settings.chords = [Chord(buttons: [.middle, .fourth], actions: [])]
+        store.settings = settings
+
+        let data = try store.exportData()
+        let other = SettingsStore(directory: tempDirectory())
+        try other.importData(data)
+        XCTAssertEqual(other.settings, settings)
+    }
+
+    // The critical contract: a malformed import must throw WITHOUT mutating
+    // the store — the assignment happens only after a strict decode succeeds.
+
+    func testImportGarbageLeavesSettingsUntouched() throws {
+        let dir = tempDirectory()
+        let store = SettingsStore(directory: dir)
+        store.settings.buttonBindings = [ButtonBinding(button: .fifth, actions: [.none])]
+
+        XCTAssertThrowsError(try store.importData(Data("garbage".utf8)))
+        XCTAssertEqual(store.settings.buttonBindings.count, 1)   // untouched
+    }
 }

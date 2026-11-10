@@ -205,4 +205,33 @@ final class AppModel {
         store.settings = settings
         save()
     }
+
+    // Settings import/export (Phase 3 Task 9). Import is all-or-nothing: the
+    // store's strict importData throws on malformed data before any assignment,
+    // so the user's settings survive a bad file untouched.
+
+    private(set) var lastImportError: String?
+
+    func exportSettings() {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "artMouse-settings.json"
+        if panel.runModal() == .OK, let url = panel.url {
+            try? store.exportData().write(to: url)
+        }
+    }
+
+    func importSettings() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            let data = try Data(contentsOf: url)
+            try store.importData(data)
+            save()
+            lastImportError = nil
+        } catch {
+            lastImportError = "Import failed: \(error.localizedDescription)"
+        }
+    }
 }

@@ -25,6 +25,8 @@ struct SettingsWindow: View {
                     .tabItem { Text("Chords") }
                 AppsTabView(model: model)
                     .tabItem { Text("Apps") }
+                GeneralTabView(model: model)
+                    .tabItem { Text("General") }
                 CursorTabView(model: model)
                     .tabItem { Text("Cursor") }
                 DevicesTabView(model: model)

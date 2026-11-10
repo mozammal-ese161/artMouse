@@ -53,4 +53,13 @@ public final class SettingsStore {
     public static func decode(_ data: Data) throws -> GlobalSettings {
         try JSONDecoder().decode(GlobalSettings.self, from: data)
     }
+
+    public func exportData() throws -> Data {
+        try encoder.encode(settings)
+    }
+
+    /// Strict import: throws on malformed data WITHOUT touching current settings.
+    public func importData(_ data: Data) throws {
+        settings = try Self.decode(data)
+    }
 }
