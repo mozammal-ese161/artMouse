@@ -22,9 +22,12 @@ struct ActionEditorView: View {
         case .open(let target): OpenActionEditorView(target: target, onChange: onChange)
         case .device(let op): DeviceActionEditorView(op: op, onChange: onChange)
         case .scroll(let spec): ScrollActionEditorView(spec: spec, onChange: onChange)
-        // Task 6/7 replace: interim placeholder editors for the new cases.
-        case .macro: Text("Macro (Task 6)").foregroundStyle(.secondary)
-        // Single-case payload is not bound yet (brief's `let op` warns unused).
+        case .macro(let steps, let repeatMode, let intervalMS, let proxy):
+            MacroActionEditorView(steps: steps, repeatMode: repeatMode,
+                                  repeatIntervalMS: intervalMS, modifierProxy: proxy,
+                                  onChange: onChange)
+        // Task 7 replaces this interim placeholder (single-case payload is
+        // not bound yet; a bound `let op` would warn unused).
         case .snapping: Text("Snapping (Task 7)").foregroundStyle(.secondary)
         // SDK adaptation: `Action` has its own `.none` case, so a bare `case .none`
         // binds to `Optional.none` (nil) and the wrapped `Action.none` payload
@@ -47,7 +50,7 @@ struct ActionEditorView: View {
 }
 
 enum ActionCategory: CaseIterable {
-    case none, click, mission, music, zoom, switcher, open, device, scroll
+    case none, click, mission, music, zoom, switcher, open, device, scroll, macro
 
     var label: String {
         switch self {
@@ -60,6 +63,7 @@ enum ActionCategory: CaseIterable {
         case .open: return "Open"
         case .device: return "Device"
         case .scroll: return "Scroll"
+        case .macro: return "Macro"
         }
     }
 
@@ -74,9 +78,9 @@ enum ActionCategory: CaseIterable {
         case .open: self = .open
         case .device: self = .device
         case .scroll: self = .scroll
-        // Task 6/7 replace: no category yet; picker selection still routes
-        // through `initialAction` until the real categories land.
-        case .macro: self = .none
+        case .macro: self = .macro
+        // Task 7 replace: no category yet; picker selection still routes
+        // through `initialAction` until the real category lands.
         case .snapping: self = .none
         }
     }
@@ -92,6 +96,8 @@ enum ActionCategory: CaseIterable {
         case .open: return .open(.path(""))
         case .device: return .device(.activateCursorSpeed(nil))
         case .scroll: return .scroll(ScrollSpec(direction: .up))
+        case .macro: return .macro(steps: [.enterKey(keyCode: 40, mods: [])],
+                                   repeatMode: .none, repeatIntervalMS: 250, modifierProxy: false)
         }
     }
 }
