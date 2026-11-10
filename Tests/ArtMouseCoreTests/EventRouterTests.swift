@@ -143,6 +143,37 @@ final class EventRouterTests: XCTestCase {
         XCTAssertEqual(router.handle(.buttonUp(.middle)), .consume)
         XCTAssertEqual(clickLock.upCalls.map(\.button), [.middle])
     }
+
+    func testScrollBindingFiresOncePerTick() {
+        let executor = RecordingExecutor()
+        var settings = GlobalSettings.default
+        settings.scrollBindings = [ScrollBinding(axis: .vertical, direction: .up,
+                                                 actions: [.mission(.missionControl, reverse: false)])]
+        let router = EventRouter(settings: store(settings), executor: executor,
+                                 clickLock: StubClickLock(), cursor: StubCursor())
+        XCTAssertEqual(router.handle(.scrolled(axis: .vertical, ticks: 1)), .consume)
+        XCTAssertEqual(executor.performed.count, 1)
+        // Burst: dense tick stream fires once per tick, never amplified.
+        for _ in 0..<10 { _ = router.handle(.scrolled(axis: .vertical, ticks: 2)) }
+        XCTAssertEqual(executor.performed.count, 11)
+    }
+
+    func testScrollBindingDirectionMatching() {
+        let executor = RecordingExecutor()
+        var settings = GlobalSettings.default
+        settings.scrollBindings = [ScrollBinding(axis: .vertical, direction: .up, actions: [.none])]
+        let router = EventRouter(settings: store(settings), executor: executor,
+                                 clickLock: StubClickLock(), cursor: StubCursor())
+        XCTAssertEqual(router.handle(.scrolled(axis: .vertical, ticks: -1)), .passThrough)  // down ≠ up
+        XCTAssertEqual(router.handle(.scrolled(axis: .horizontal, ticks: 1)), .passThrough) // axis ≠
+    }
+
+    func testUnboundScrollFallsThroughToController() {
+        // No bindings, no controller (nil) → passThrough (Phase 1 behavior).
+        let router = EventRouter(settings: store(.default), executor: RecordingExecutor(),
+                                 clickLock: StubClickLock(), cursor: StubCursor())
+        XCTAssertEqual(router.handle(.scrolled(axis: .vertical, ticks: 1)), .passThrough)
+    }
 }
 
 final class RecordingExecutor: ActionExecuting {

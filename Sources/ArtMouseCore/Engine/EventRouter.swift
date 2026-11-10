@@ -21,6 +21,8 @@ public final class EventRouter: EventRouting {
     private let executor: ActionExecuting
     private let clickLock: ClickLockCoordinating
     private let cursor: CursorControlling
+    /// Two-way scroll controller (Task 8 wires it); nil means stock scroll.
+    private let scroll: ScrollControlling?
     /// Buttons currently held, mapped to the hold action that began them.
     /// Keyed independently of the current bindings so a mid-hold unbind
     /// (live settings) still delivers endedHold on button-up.
@@ -32,11 +34,13 @@ public final class EventRouter: EventRouting {
     private var clickLockButtons: Set<ButtonID> = []
 
     public init(settings: SettingsStore, executor: ActionExecuting,
-                clickLock: ClickLockCoordinating, cursor: CursorControlling) {
+                clickLock: ClickLockCoordinating, cursor: CursorControlling,
+                scroll: ScrollControlling? = nil) {
         self.settings = settings
         self.executor = executor
         self.clickLock = clickLock
         self.cursor = cursor
+        self.scroll = scroll
     }
 
     public func handle(_ event: InputEvent) -> RouterOutcome {
@@ -45,9 +49,39 @@ public final class EventRouter: EventRouting {
         case .buttonUp(let button): return handleUp(button)
         case .moved, .dragged:
             return cursor.outcome(forMove: event)
-        case .scrolled, .other:
+        case .scrolled(let axis, let ticks):
+            return handleScroll(axis: axis, ticks: ticks)
+        case .other:
             return .passThrough
         }
+    }
+
+    /// A wheel tick resolves its (axis, direction) binding and fires each of
+    /// its actions once per tick — never amplified across a dense tick burst.
+    /// Unmatched ticks fall through to the scroll controller; nil controller
+    /// (Task 8 wires it) means stock scroll behavior. The controller's
+    /// disposition maps onto a routing outcome: intercepts consume the event
+    /// (the emitter owns posting), scales become delta transforms.
+    private func handleScroll(axis: ScrollAxis, ticks: Double) -> RouterOutcome {
+        if let binding = scrollBinding(axis: axis, ticks: ticks) {
+            for action in binding.actions { executor.perform(action) }
+            return .consume
+        }
+        switch scroll?.disposition(forScroll: axis, ticks: ticks) ?? .passThrough {
+        case .passThrough: return .passThrough
+        case .scale(let vertical, let horizontal):
+            return .scrollTransform(verticalFactor: vertical, horizontalFactor: horizontal)
+        case .intercept: return .consume
+        }
+    }
+
+    private func scrollBinding(axis: ScrollAxis, ticks: Double) -> ScrollBinding? {
+        let direction: ScrollDirection
+        switch axis {
+        case .vertical: direction = ticks > 0 ? .up : .down
+        case .horizontal: direction = ticks > 0 ? .right : .left
+        }
+        return settings.settings.scrollBindings.first { $0.axis == axis && $0.direction == direction && !$0.actions.isEmpty }
     }
 
     /// A matched binding with no actions behaves like no binding at all: both
