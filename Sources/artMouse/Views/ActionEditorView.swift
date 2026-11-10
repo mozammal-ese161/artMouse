@@ -26,9 +26,7 @@ struct ActionEditorView: View {
             MacroActionEditorView(steps: steps, repeatMode: repeatMode,
                                   repeatIntervalMS: intervalMS, modifierProxy: proxy,
                                   onChange: onChange)
-        // Task 7 replaces this interim placeholder (single-case payload is
-        // not bound yet; a bound `let op` would warn unused).
-        case .snapping: Text("Snapping (Task 7)").foregroundStyle(.secondary)
+        case .snapping(let op): SnapActionEditorView(op: op, onChange: onChange)
         // SDK adaptation: `Action` has its own `.none` case, so a bare `case .none`
         // binds to `Optional.none` (nil) and the wrapped `Action.none` payload
         // needs its own pattern; both mean "no action" and render as Unbound.
@@ -50,7 +48,7 @@ struct ActionEditorView: View {
 }
 
 enum ActionCategory: CaseIterable {
-    case none, click, mission, music, zoom, switcher, open, device, scroll, macro
+    case none, click, mission, music, zoom, switcher, open, device, scroll, macro, snapping
 
     var label: String {
         switch self {
@@ -64,6 +62,7 @@ enum ActionCategory: CaseIterable {
         case .device: return "Device"
         case .scroll: return "Scroll"
         case .macro: return "Macro"
+        case .snapping: return "Snap"
         }
     }
 
@@ -79,9 +78,7 @@ enum ActionCategory: CaseIterable {
         case .device: self = .device
         case .scroll: self = .scroll
         case .macro: self = .macro
-        // Task 7 replace: no category yet; picker selection still routes
-        // through `initialAction` until the real category lands.
-        case .snapping: self = .none
+        case .snapping: self = .snapping
         }
     }
 
@@ -98,6 +95,7 @@ enum ActionCategory: CaseIterable {
         case .scroll: return .scroll(ScrollSpec(direction: .up))
         case .macro: return .macro(steps: [.enterKey(keyCode: 40, mods: [])],
                                    repeatMode: .none, repeatIntervalMS: 250, modifierProxy: false)
+        case .snapping: return .snapping(.snap(click: true, bounce: false))
         }
     }
 }
