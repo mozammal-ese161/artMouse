@@ -126,4 +126,66 @@ final class SettingsStoreTests: XCTestCase {
         settings.wheelModeProfiles = [first]                // named gone
         XCTAssertEqual(settings.activeWheelProfile, first)  // first
     }
+
+    // A Phase 2 settings file (no appProfiles key) must decode with an empty
+    // profile list — per-app overrides are additive, never breaking.
+    func testAppProfilesDecodeDefaultEmpty() throws {
+        let phase2JSON = """
+        {"activeCursorSpeedProfileID":null,"buttonBindings":[],
+         "chords":[],"cursorSpeedProfiles":[{"acceleration":1,"id":"11111111-1111-1111-1111-111111111111","name":"Default","sensitivity":1600}],
+         "precisionProfileID":null,"schemaVersion":1,"scrollBindings":[],
+         "wheelModeProfiles":[]}
+        """
+        let settings = try SettingsStore.decode(Data(phase2JSON.utf8))
+        XCTAssertEqual(settings.appProfiles, [])
+    }
+
+    func testEffectiveResolutionFallsBackToGlobal() {
+        var settings = GlobalSettings.default
+        let binding = ButtonBinding(button: .fourth, actions: [.none])
+        settings.buttonBindings = [binding]
+        XCTAssertEqual(settings.effectiveButtonBindings(for: "com.apple.Safari"), [binding])   // no app profile
+        XCTAssertEqual(settings.effectiveButtonBindings(for: nil), [binding])                  // nil watcher
+    }
+
+    func testEffectiveResolutionPrefersAppProfile() {
+        var settings = GlobalSettings.default
+        let globalBinding = ButtonBinding(button: .fourth, actions: [.none])
+        let appBinding = ButtonBinding(button: .middle, actions: [.mission(.launchpad, reverse: false)])
+        let appProfile = AppProfile(bundleID: "com.apple.Safari", name: "Safari",
+                                    buttonBindings: [appBinding], scrollBindings: nil,
+                                    cursorSpeedProfileID: nil, wheelModeProfileID: nil)
+        settings.appProfiles = [appProfile]
+        settings.buttonBindings = [globalBinding]
+
+        XCTAssertEqual(settings.effectiveButtonBindings(for: "com.apple.Safari"), [appBinding])
+        XCTAssertEqual(settings.effectiveButtonBindings(for: "com.apple.TextEdit"), [globalBinding])
+
+        let fast = WheelModeProfile(name: "Fast")
+        settings.wheelModeProfiles = [WheelModeProfile(name: "Slow"), fast]
+        settings.appProfiles[0].wheelModeProfileID = fast.id
+        XCTAssertEqual(settings.effectiveWheelProfile(for: "com.apple.Safari"), fast)
+        // cursor override nil → global chain applies (the Default profile)
+        XCTAssertEqual(settings.effectiveCursorProfile(for: "com.apple.Safari"), settings.activeProfile)
+    }
+
+    func testEffectiveCursorAndWheelOverrides() {
+        var settings = GlobalSettings.default
+        let slow = settings.cursorSpeedProfiles[0]
+        let fast = WheelModeProfile(name: "Fast")
+        // Asserted while wheelModeProfiles is still the default empty list:
+        // with no bundle ID the fallback is activeWheelProfile, and once the
+        // list holds `fast` that fallback resolves to `fast`, not nil (brief
+        // fix: the list assignment moved below this line so the stated
+        // precondition holds).
+        XCTAssertEqual(settings.effectiveWheelProfile(for: nil), nil)   // default empty list → nil
+        settings.wheelModeProfiles = [fast]
+        let appProfile = AppProfile(bundleID: "com.apple.Safari", name: "Safari",
+                                    buttonBindings: nil, scrollBindings: nil,
+                                    cursorSpeedProfileID: slow.id, wheelModeProfileID: fast.id)
+        settings.appProfiles = [appProfile]
+
+        XCTAssertEqual(settings.effectiveCursorProfile(for: "com.apple.Safari"), slow)
+        XCTAssertEqual(settings.effectiveWheelProfile(for: "com.apple.Safari"), fast)
+    }
 }

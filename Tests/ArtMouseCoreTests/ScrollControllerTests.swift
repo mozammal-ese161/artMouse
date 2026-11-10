@@ -172,4 +172,24 @@ final class ScrollControllerTests: XCTestCase {
         let controller = ScrollController(store: store, emitter: ScrollEmitter(poster: poster))
         XCTAssertEqual(controller.disposition(forScroll: .vertical, ticks: 0), .passThrough)
     }
+
+    // Phase 3 Task 5: the frontmost app's wheel override wins over the global
+    // chain — disposition resolves the app profile's Constant profile, so the
+    // tick emits Constant's lines (9) instead of the global acceleration scale.
+    func testWatcherResolvesPerAppWheelProfile() {
+        let store = makeStore(profiles: [WheelModeProfile(name: "Default")])
+        var settings = store.settings
+        let constant = WheelModeProfile(name: "Const", mode: .constant, lines: 9)
+        settings.wheelModeProfiles = [WheelModeProfile(name: "Default"), constant]
+        let appProfile = AppProfile(bundleID: "com.apple.Safari", name: "Safari",
+                                    buttonBindings: nil, scrollBindings: nil,
+                                    cursorSpeedProfileID: nil, wheelModeProfileID: constant.id)
+        settings.appProfiles = [appProfile]
+        store.settings = settings
+        let poster = RecordingPoster()
+        let controller = ScrollController(store: store, emitter: ScrollEmitter(poster: poster),
+                                          watcher: StubWatcher(bundleID: "com.apple.Safari"))
+        XCTAssertEqual(controller.disposition(forScroll: .vertical, ticks: 1), .intercept)
+        XCTAssertEqual(poster.events[0].getDoubleValueField(.scrollWheelEventDeltaAxis1), 9, accuracy: 1e-9)
+    }
 }

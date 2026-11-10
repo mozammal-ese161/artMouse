@@ -104,4 +104,23 @@ final class CursorControllerTests: XCTestCase {
         XCTAssertEqual(controller.outcome(forMove: .moved(dx: 8, dy: 0)),
                        .cursorTransform(dxFactor: 1.375, dyFactor: 1.375))
     }
+
+    // Phase 3 Task 5: the frontmost app's cursor override wins over the
+    // globally active profile (Fast) — the watcher resolves Slow instead.
+    func testWatcherResolvesPerAppCursorProfile() {
+        let store = makeStore()
+        var settings = store.settings
+        settings.activeCursorSpeedProfileID = settings.cursorSpeedProfiles[2].id   // Fast
+        let slow = settings.cursorSpeedProfiles[0]
+        let appProfile = AppProfile(bundleID: "com.apple.Safari", name: "Safari",
+                                    buttonBindings: nil, scrollBindings: nil,
+                                    cursorSpeedProfileID: slow.id, wheelModeProfileID: nil)
+        settings.appProfiles = [appProfile]
+        store.settings = settings
+        let watcher = StubWatcher(bundleID: "com.apple.Safari")
+        let controller = CursorController(store: store, watcher: watcher)
+        // Slow: sens 0.5 × accel 1.0 = 0.5 at any speed
+        XCTAssertEqual(controller.outcome(forMove: .moved(dx: 8, dy: 0)),
+                       .cursorTransform(dxFactor: 0.5, dyFactor: 0.5))
+    }
 }

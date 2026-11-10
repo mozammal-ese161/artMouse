@@ -41,6 +41,9 @@ public final class EventRouter: EventRouting {
     /// and click-lock, macros are a distinct arm: the whole program runs on
     /// button-down, and only hold-mode programs register for an up-time stop.
     private let macros: MacroCoordinating?
+    /// Frontmost-app source for per-app profile resolution (Phase 3 Task 5);
+    /// nil (tests, pre-wiring) means every lookup uses the global settings.
+    private let watcher: FrontmostProviding?
     /// Buttons currently held, mapped to the hold action that began them.
     /// Keyed independently of the current bindings so a mid-hold unbind
     /// (live settings) still delivers endedHold on button-up.
@@ -59,7 +62,7 @@ public final class EventRouter: EventRouting {
     public init(settings: SettingsStore, executor: ActionExecuting,
                 clickLock: ClickLockCoordinating, cursor: CursorControlling,
                 scroll: ScrollControlling? = nil, chords: ChordCoordinating? = nil,
-                macros: MacroCoordinating? = nil) {
+                macros: MacroCoordinating? = nil, watcher: FrontmostProviding? = nil) {
         self.settings = settings
         self.executor = executor
         self.clickLock = clickLock
@@ -67,6 +70,7 @@ public final class EventRouter: EventRouting {
         self.scroll = scroll
         self.chords = chords
         self.macros = macros
+        self.watcher = watcher
     }
 
     public func handle(_ event: InputEvent) -> RouterOutcome {
@@ -108,7 +112,8 @@ public final class EventRouter: EventRouting {
 
     private func scrollBinding(axis: ScrollAxis, ticks: Double) -> ScrollBinding? {
         let direction = ScrollDirection.derived(axis: axis, ticks: ticks)
-        return settings.settings.scrollBindings.first { $0.axis == axis && $0.direction == direction && !$0.actions.isEmpty }
+        return settings.settings.effectiveScrollBindings(for: watcher?.frontmostBundleID)
+            .first { $0.axis == axis && $0.direction == direction && !$0.actions.isEmpty }
     }
 
     /// A matched binding with no actions behaves like no binding at all: both
@@ -116,7 +121,8 @@ public final class EventRouter: EventRouting {
     /// of the unbind fix (AppModel removes the binding outright; an empty
     /// binding that survives elsewhere must never swallow a dead button).
     private func binding(for button: ButtonID) -> ButtonBinding? {
-        settings.settings.buttonBindings.first { $0.button == button && !$0.actions.isEmpty }
+        settings.settings.effectiveButtonBindings(for: watcher?.frontmostBundleID)
+            .first { $0.button == button && !$0.actions.isEmpty }
     }
 
     /// Chord intercept FIRST: a capture consumes or defers the press before

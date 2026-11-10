@@ -38,6 +38,7 @@ public struct GlobalSettings: Codable, Equatable {
     public var activeWheelModeProfileID: UUID?
     public var scrollBindings: [ScrollBinding]
     public var chords: [Chord]
+    public var appProfiles: [AppProfile]
 
     public static let `default` = GlobalSettings(
         schemaVersion: 1,
@@ -55,7 +56,8 @@ public struct GlobalSettings: Codable, Equatable {
         wheelModeProfiles: [],
         activeWheelModeProfileID: nil,
         scrollBindings: [],
-        chords: []
+        chords: [],
+        appProfiles: []
     )
 }
 
@@ -77,6 +79,8 @@ extension GlobalSettings {
         activeWheelModeProfileID = try c.decodeIfPresent(UUID.self, forKey: .activeWheelModeProfileID)
         scrollBindings = try c.decodeIfPresent([ScrollBinding].self, forKey: .scrollBindings) ?? []
         chords = try c.decodeIfPresent([Chord].self, forKey: .chords) ?? []
+        // Phase 3 field: absent in Phase 1/2 files → empty defaults (backward compat).
+        appProfiles = try c.decodeIfPresent([AppProfile].self, forKey: .appProfiles) ?? []
     }
 }
 
@@ -103,5 +107,36 @@ public extension GlobalSettings {
            let match = wheelModeProfiles.first(where: { $0.id == id }) { return match }
         if let named = wheelModeProfiles.first(where: { $0.name == "Default" }) { return named }
         return wheelModeProfiles.first
+    }
+}
+
+/// Per-application overlay resolution (Phase 3 Task 5): the frontmost app's
+/// profile, when one matches and the relevant field is non-nil, replaces the
+/// global value; every other case (nil watcher, no match, nil override) is the
+/// global chain above.
+public extension GlobalSettings {
+    private func appProfile(for bundleID: String?) -> AppProfile? {
+        guard let bundleID else { return nil }
+        return appProfiles.first { $0.bundleID == bundleID }
+    }
+
+    func effectiveButtonBindings(for bundleID: String?) -> [ButtonBinding] {
+        appProfile(for: bundleID)?.buttonBindings ?? buttonBindings
+    }
+
+    func effectiveScrollBindings(for bundleID: String?) -> [ScrollBinding] {
+        appProfile(for: bundleID)?.scrollBindings ?? scrollBindings
+    }
+
+    func effectiveCursorProfile(for bundleID: String?) -> CursorSpeedProfile? {
+        if let id = appProfile(for: bundleID)?.cursorSpeedProfileID,
+           let match = cursorSpeedProfiles.first(where: { $0.id == id }) { return match }
+        return activeProfile
+    }
+
+    func effectiveWheelProfile(for bundleID: String?) -> WheelModeProfile? {
+        if let id = appProfile(for: bundleID)?.wheelModeProfileID,
+           let match = wheelModeProfiles.first(where: { $0.id == id }) { return match }
+        return activeWheelProfile
     }
 }

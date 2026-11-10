@@ -1,5 +1,12 @@
 import AppKit
 
+/// The frontmost-bundle-ID source the router and both controllers consume for
+/// per-app profile resolution (Phase 3 Task 5). AppWatcher is the real
+/// implementation; tests substitute a bare double.
+public protocol FrontmostProviding: AnyObject {
+    var frontmostBundleID: String? { get }
+}
+
 public final class AppWatcher {
     private let notificationCenter: NotificationCenter
     public private(set) var frontmostBundleID: String?
@@ -34,3 +41,5 @@ public final class AppWatcher {
         }
     }
 }
+
+extension AppWatcher: FrontmostProviding {}

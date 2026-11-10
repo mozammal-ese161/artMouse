@@ -29,14 +29,19 @@ public final class CursorController: CursorControlling, CursorCoordinating {
 
     private let store: SettingsStore
     private let clock: () -> Double
+    /// Frontmost-app source for per-app cursor-profile resolution (Phase 3
+    /// Task 5); nil means every move uses the global chain.
+    private let watcher: FrontmostProviding?
 
     private var pendingRestore: (target: UUID, at: Double)?
     private var precisionActive = false
     private(set) public var safetyRestoreWarning: String?
 
-    public init(store: SettingsStore, clock: @escaping () -> Double = { Date().timeIntervalSince1970 }) {
+    public init(store: SettingsStore, clock: @escaping () -> Double = { Date().timeIntervalSince1970 },
+                watcher: FrontmostProviding? = nil) {
         self.store = store
         self.clock = clock
+        self.watcher = watcher
     }
 
     public var activeProfile: CursorSpeedProfile? {
@@ -96,7 +101,10 @@ public final class CursorController: CursorControlling, CursorCoordinating {
            let match = store.settings.cursorSpeedProfiles.first(where: { $0.id == id }) {
             return match
         }
-        return store.settings.activeProfile
+        // effectiveCursorProfile(for:) internally falls back to activeProfile
+        // when no app override applies, so this single call covers
+        // precision-off + app-override + the global chain.
+        return store.settings.effectiveCursorProfile(for: watcher?.frontmostBundleID)
     }
 
     /// UI may transiently hold out-of-range values while editing; the engine

@@ -188,6 +188,34 @@ final class EventRouterTests: XCTestCase {
         XCTAssertEqual(router.handle(.scrolled(axis: .vertical, ticks: 0)), .passThrough)
         XCTAssertTrue(executor.performed.isEmpty)
     }
+
+    // Phase 3 Task 5: a matching app profile's button bindings replace the
+    // global ones while its app is frontmost; switching the watcher to an
+    // unprofiled app falls back to the global binding (here [.none], so the
+    // press matches, consumes, and performs nothing).
+    func testAppProfileOverridesBindingsWhenFrontmost() {
+        let executor = RecordingExecutor()
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let store = SettingsStore(directory: dir)
+        var settings = store.settings
+        settings.buttonBindings = [ButtonBinding(button: .fourth, actions: [.none])]
+        let appBinding = ButtonBinding(button: .fourth, actions: [.mission(.missionControl, reverse: false)])
+        settings.appProfiles = [AppProfile(bundleID: "com.apple.Safari", name: "Safari",
+                                           buttonBindings: [appBinding], scrollBindings: nil,
+                                           cursorSpeedProfileID: nil, wheelModeProfileID: nil)]
+        store.settings = settings
+        let watcher = StubWatcher(bundleID: "com.apple.Safari")
+        let router = EventRouter(settings: store, executor: executor,
+                                 clickLock: StubClickLock(), cursor: StubCursor(),
+                                 watcher: watcher)
+        XCTAssertEqual(router.handle(.buttonDown(.fourth)), .consume)
+        XCTAssertEqual(executor.performed, [.mission(.missionControl, reverse: false)])
+
+        watcher.frontmostBundleID = "com.apple.TextEdit"     // no profile → global
+        // Global binding is [.none] (non-empty → matched → .consume, performing nothing)
+        XCTAssertEqual(router.handle(.buttonUp(.fourth)), .consume)
+    }
 }
 
 final class RecordingExecutor: ActionExecuting {
@@ -225,6 +253,14 @@ final class StubCursor: CursorControlling {
     let outcome: RouterOutcome
     init(outcome: RouterOutcome = .passThrough) { self.outcome = outcome }
     func outcome(forMove event: InputEvent) -> RouterOutcome { outcome }
+}
+
+/// Frontmost-app test double (Phase 3 Task 5). Defined once here, module
+/// visible: the router, cursor, and scroll suites all drive watcher-driven
+/// per-app resolution through the same `FrontmostProviding` seam.
+final class StubWatcher: FrontmostProviding {
+    var frontmostBundleID: String?
+    init(bundleID: String?) { self.frontmostBundleID = bundleID }
 }
 
 final class RouterChordTests: XCTestCase {

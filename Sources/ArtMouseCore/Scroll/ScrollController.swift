@@ -9,14 +9,19 @@ public final class ScrollController: ScrollControlling, WheelModeSwitching {
     private let store: SettingsStore
     private let emitter: ScrollEmitter
     private let clock: () -> Double
+    /// Frontmost-app source for per-app wheel-profile resolution (Phase 3
+    /// Task 5); nil means every scroll uses the global chain.
+    private let watcher: FrontmostProviding?
     /// The direction currently auto-scrolling (nil = not in auto).
     private var autoDirection: ScrollDirection?
 
     public init(store: SettingsStore, emitter: ScrollEmitter,
-                clock: @escaping () -> Double = { Date().timeIntervalSince1970 }) {
+                clock: @escaping () -> Double = { Date().timeIntervalSince1970 },
+                watcher: FrontmostProviding? = nil) {
         self.store = store
         self.emitter = emitter
         self.clock = clock
+        self.watcher = watcher
     }
 
     /// Cadence pump for smooth drain and auto emissions — Task 8 wires an
@@ -38,7 +43,7 @@ public final class ScrollController: ScrollControlling, WheelModeSwitching {
 
     public func disposition(forScroll axis: ScrollAxis, ticks: Double) -> ScrollDisposition {
         guard ticks != 0 else { return .passThrough }   // native momentum events can carry zero deltas
-        guard let profile = store.settings.activeWheelProfile else { return .passThrough }
+        guard let profile = store.settings.effectiveWheelProfile(for: watcher?.frontmostBundleID) else { return .passThrough }
         let sens = profile.sensFactor.clamped(0.1...10.0)
         let accel = profile.acceleration.clamped(0...10.0)
         let lines = profile.lines.clamped(0...100.0)

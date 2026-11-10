@@ -42,7 +42,19 @@ final class EngineBootstrap {
     }
 
     func start(store: SettingsStore) {
-        let cursorController = CursorController(store: store)
+        // Frontmost-app tracking (Task 18): NSWorkspace activation
+        // notifications record which bundle ID is frontmost. Phase 3 Task 5's
+        // per-app profiles consume it, so ONE watcher is constructed here and
+        // shared with the router and both controllers — they must read the
+        // same activation state, not stale copies. The notification block
+        // hops to the main queue (see the calling discipline below), so the
+        // unsynchronized `frontmostBundleID` write stays on the same thread
+        // as everything else here. (Task 8 moves ownership to AppDelegate.)
+        let appWatcher = AppWatcher()
+        self.appWatcher = appWatcher
+        appWatcher.start()
+
+        let cursorController = CursorController(store: store, watcher: appWatcher)
         self.cursor = cursorController
 
         // One poster shared by the executor (and the click-lock coordinator
@@ -51,7 +63,7 @@ final class EngineBootstrap {
         // tap uses to skip self-posted events (loop protection).
         let poster = CGEventPoster()
         let emitter = ScrollEmitter(poster: poster)
-        let scrollController = ScrollController(store: store, emitter: emitter)
+        let scrollController = ScrollController(store: store, emitter: emitter, watcher: appWatcher)
         let chordEngine = ChordEngine(settings: store)
         // Button-bound macros share the same poster so their synthetic keys
         // and clicks carry the private-source tag too (loop protection).
@@ -66,7 +78,7 @@ final class EngineBootstrap {
         let router = EventRouter(settings: store, executor: executor,
                                  clickLock: clickLock, cursor: cursorController,
                                  scroll: scrollController, chords: chordEngine,
-                                 macros: macroEngine)
+                                 macros: macroEngine, watcher: appWatcher)
         let tapEngine = EventTapEngine(router: router, tapFactory: CGEventTapFactory(),
                                        isSelfPosted: { poster.owns($0) })
         self.engine = tapEngine
@@ -140,15 +152,5 @@ final class EngineBootstrap {
         }
         RunLoop.main.add(emitterDriver, forMode: .common)
         self.emitterDriver = emitterDriver
-
-        // Frontmost-app tracking (Task 18): NSWorkspace activation
-        // notifications record which bundle ID is frontmost. Phase 1 only
-        // stores the value; Phase 3's per-app profiles consume it. The
-        // notification block hops to the main queue (see the calling
-        // discipline above), so the unsynchronized `frontmostBundleID` write
-        // stays on the same thread as everything else here.
-        let appWatcher = AppWatcher()
-        self.appWatcher = appWatcher
-        appWatcher.start()
     }
 }
