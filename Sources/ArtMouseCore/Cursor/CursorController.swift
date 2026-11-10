@@ -13,6 +13,14 @@ public protocol CursorCoordinating: AnyObject {
     func endPrecision()
 }
 
+/// Wheel-mode operations the executor forwards button-assigned device ops to
+/// (Task 8); kept separate from the router's `ScrollControlling` transform
+/// API. Conformed to by ScrollController.
+public protocol WheelModeSwitching: AnyObject {
+    /// Rotates to the next wheel-mode profile.
+    func activateNextWheelMode()
+}
+
 /// Resolves cursor speed profiles into event transforms; owns profile
 /// switching, precision hold, and the 5 s safety restore (spec §7).
 public final class CursorController: CursorControlling, CursorCoordinating {

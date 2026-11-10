@@ -174,6 +174,20 @@ final class EventRouterTests: XCTestCase {
                                  clickLock: StubClickLock(), cursor: StubCursor())
         XCTAssertEqual(router.handle(.scrolled(axis: .vertical, ticks: 1)), .passThrough)
     }
+
+    // Task 6 review ruling (landed in Task 8): the zero-tick guard sits BEFORE
+    // binding lookup — otherwise a tick of 0 derives .down/.left and a binding
+    // for that direction fires (and consumes) on a delta-less momentum event.
+    func testZeroTickScrollPassesThroughBeforeBindings() {
+        let executor = RecordingExecutor()
+        var settings = GlobalSettings.default
+        settings.scrollBindings = [ScrollBinding(axis: .vertical, direction: .down,
+                                                 actions: [.mission(.missionControl, reverse: false)])]
+        let router = EventRouter(settings: store(settings), executor: executor,
+                                 clickLock: StubClickLock(), cursor: StubCursor())
+        XCTAssertEqual(router.handle(.scrolled(axis: .vertical, ticks: 0)), .passThrough)
+        XCTAssertTrue(executor.performed.isEmpty)
+    }
 }
 
 final class RecordingExecutor: ActionExecuting {
@@ -211,4 +225,91 @@ final class StubCursor: CursorControlling {
     let outcome: RouterOutcome
     init(outcome: RouterOutcome = .passThrough) { self.outcome = outcome }
     func outcome(forMove event: InputEvent) -> RouterOutcome { outcome }
+}
+
+final class RouterChordTests: XCTestCase {
+    private func makeStore(_ settings: GlobalSettings) -> SettingsStore {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let store = SettingsStore(directory: dir)
+        store.settings = settings
+        return store
+    }
+
+    func testChordFirePerformsActionsAndConsumes() {
+        let executor = RecordingExecutor()
+        var settings = GlobalSettings.default
+        settings.chords = [Chord(buttons: [.middle, .fourth],
+                                 actions: [.mission(.missionControl, reverse: false)])]
+        let settingsStore = makeStore(settings)
+        let engine = ChordEngine(settings: settingsStore)
+        let router = EventRouter(settings: settingsStore, executor: executor,
+                                 clickLock: StubClickLock(), cursor: StubCursor(), chords: engine)
+        XCTAssertEqual(router.handle(.buttonDown(.middle)), .consume)   // captured
+        XCTAssertTrue(executor.performed.isEmpty)
+        XCTAssertEqual(router.handle(.buttonDown(.fourth)), .consume)   // fired
+        XCTAssertEqual(executor.performed, [.mission(.missionControl, reverse: false)])
+    }
+
+    func testChordFlushPerformsNormalBindingsThenReSends() {
+        let executor = RecordingExecutor()
+        var settings = GlobalSettings.default
+        settings.buttonBindings = [ButtonBinding(button: .middle, actions: [.mission(.launchpad, reverse: false)])]
+        settings.chords = [Chord(buttons: [.middle, .fourth], actions: [.click(.left, [])], timeout: 0.3)]
+        let settingsStore = makeStore(settings)
+        let engine = ChordEngine(settings: settingsStore)
+        let router = EventRouter(settings: settingsStore, executor: executor,
+                                 clickLock: StubClickLock(), cursor: StubCursor(), chords: engine)
+        XCTAssertEqual(router.handle(.buttonDown(.middle)), .consume)              // captured, not performed
+        XCTAssertTrue(executor.performed.isEmpty)
+        // Fifth extends nothing → immediate flush of held [middle]; the router
+        // performs middle's normal binding, then re-sends fifth (routed,
+        // unbound → nothing extra).
+        XCTAssertEqual(router.handle(.buttonDown(.fifth)), .consume)
+        XCTAssertEqual(executor.performed, [.mission(.launchpad, reverse: false)])
+        XCTAssertEqual(executor.performed.count, 1)
+    }
+
+    func testChordStartButtonOwnBindingDeferredNotFiredDuringCapture() {
+        let executor = RecordingExecutor()
+        var settings = GlobalSettings.default
+        settings.buttonBindings = [ButtonBinding(button: .middle, actions: [.music(.playPause, fineTune: false)])]
+        settings.chords = [Chord(buttons: [.middle, .fourth], actions: [.click(.left, [])], timeout: 10.0)]
+        let settingsStore = makeStore(settings)
+        let engine = ChordEngine(settings: settingsStore)
+        let router = EventRouter(settings: settingsStore, executor: executor,
+                                 clickLock: StubClickLock(), cursor: StubCursor(), chords: engine)
+        XCTAssertEqual(router.handle(.buttonDown(.middle)), .consume)
+        XCTAssertEqual(executor.performed, [Action](), "capture defers the binding")
+        // Completing the chord fires the chord's actions — still not the start
+        // button's own binding.
+        XCTAssertEqual(router.handle(.buttonDown(.fourth)), .consume)
+        XCTAssertEqual(executor.performed, [.click(.left, [])])
+    }
+
+    // Up-path mirror: chord ups pass through the same intercept as downs.
+    // Releasing the initiator flushes all held buttons — none of their
+    // deferred bindings ever began, so nothing ends — and the cleared capture
+    // lets the next press resolve its own binding normally.
+    func testChordUpFlushRunsNormalUpsAndClearsCapture() {
+        let executor = RecordingExecutor()
+        var settings = GlobalSettings.default
+        settings.buttonBindings = [
+            ButtonBinding(button: .middle, actions: [.device(.switchPrecisionMode)]),
+            ButtonBinding(button: .fourth, actions: [.music(.playPause, fineTune: false)]),
+        ]
+        settings.chords = [Chord(buttons: [.middle, .fourth], actions: [.click(.left, [])], timeout: 10.0)]
+        let settingsStore = makeStore(settings)
+        let engine = ChordEngine(settings: settingsStore)
+        let router = EventRouter(settings: settingsStore, executor: executor,
+                                 clickLock: StubClickLock(), cursor: StubCursor(), chords: engine)
+        XCTAssertEqual(router.handle(.buttonDown(.middle)), .consume)
+        XCTAssertTrue(executor.holdsBegan.isEmpty)   // capture defers the hold
+        XCTAssertEqual(router.handle(.buttonUp(.middle)), .consume)   // initiator release → flush
+        XCTAssertTrue(executor.holdsBegan.isEmpty)
+        XCTAssertTrue(executor.holdsEnded.isEmpty)   // hold never began, so it never ends
+        XCTAssertTrue(executor.performed.isEmpty)    // up path never fires taps
+        XCTAssertEqual(router.handle(.buttonDown(.fourth)), .consume)   // capture cleared
+        XCTAssertEqual(executor.performed, [.music(.playPause, fineTune: false)])
+    }
 }

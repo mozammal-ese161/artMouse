@@ -20,6 +20,8 @@ final class EngineBootstrap {
     private var engine: EventTapEngine?
     private var tickTimer: Timer?
     private var deviceTimer: Timer?
+    /// 8 ms cadence pump for the scroll emitter (Task 8).
+    private var emitterDriver: Timer?
     private var appWatcher: AppWatcher?
     private var cancellable: AnyCancellable?
 
@@ -39,13 +41,18 @@ final class EngineBootstrap {
         self.cursor = cursorController
 
         // One poster shared by the executor (and the click-lock coordinator
-        // behind it), so every synthetic event carries the same private-source
-        // tag the engine tap uses to skip self-posted events (loop protection).
+        // behind it) AND the scroll emitter, so every synthetic event — clicks,
+        // keys, scroll chunks — carries the same private-source tag the engine
+        // tap uses to skip self-posted events (loop protection).
         let poster = CGEventPoster()
-        let executor = ActionExecutor(poster: poster, cursor: cursorController)
+        let emitter = ScrollEmitter(poster: poster)
+        let scrollController = ScrollController(store: store, emitter: emitter)
+        let chordEngine = ChordEngine(settings: store)
+        let executor = ActionExecutor(poster: poster, cursor: cursorController, wheel: scrollController)
         let clickLock = ClickLockCoordinator(executor: executor)
         let router = EventRouter(settings: store, executor: executor,
-                                 clickLock: clickLock, cursor: cursorController)
+                                 clickLock: clickLock, cursor: cursorController,
+                                 scroll: scrollController, chords: chordEngine)
         let tapEngine = EventTapEngine(router: router, tapFactory: CGEventTapFactory(),
                                        isSelfPosted: { poster.owns($0) })
         self.engine = tapEngine
@@ -72,14 +79,19 @@ final class EngineBootstrap {
         // Calling discipline: CursorController state (pendingRestore,
         // precisionActive, safetyRestoreWarning) is unsynchronized, so the tick
         // timer, the event-tap callback path, and any UI calls touching it must
-        // run on ONE queue. Both timers are scheduled on the current (main) run
-        // loop, matching Timer.scheduledTimer(on: .main, ...) semantics; CGEvent
-        // tap callbacks are delivered on that same main run loop, and start()
-        // must therefore only ever be called from the main queue. Each timer is
-        // additionally registered in .commonModes so it keeps firing while a
-        // menu is tracked or a drag is in progress — the tap's own run-loop
-        // source lives in .commonModes, so cursor ticks and device refreshes
-        // must not pause while tap callbacks keep flowing.
+        // run on ONE queue. The same holds for the Phase 2 scroll and chord
+        // state — ScrollController's autoDirection, ScrollEmitter's mode and
+        // keysDown (fed by the 8 ms pump below), and ChordEngine's capture —
+        // which the event-tap callback path, the emitter pump, and wheel-mode
+        // button actions all mutate. Every timer is scheduled on the current
+        // (main) run loop, matching Timer.scheduledTimer(on: .main, ...)
+        // semantics; CGEvent tap callbacks are delivered on that same main run
+        // loop, and start() must therefore only ever be called from the main
+        // queue. Each timer is additionally registered in .commonModes so it
+        // keeps firing while a menu is tracked or a drag is in progress — the
+        // tap's own run-loop source lives in .commonModes, so cursor ticks,
+        // scroll pumps and device refreshes must not pause while tap callbacks
+        // keep flowing.
         let tick = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self, weak cursorController] _ in
             cursorController?.tick()
             // SDK adaptation: Timer closures are @Sendable while this class is
@@ -96,6 +108,17 @@ final class EngineBootstrap {
         }
         RunLoop.main.add(deviceRefresh, forMode: .common)
         deviceTimer = deviceRefresh
+
+        // Scroll emitter cadence pump (Task 8): drains smooth-scroll chunks,
+        // emits due auto ticks, and releases wheel-held keys. 8 ms matches the
+        // emitter's smallest representable interval (intervalMS clamped to
+        // >= 8); calling discipline above keeps it on the main run loop in
+        // .common mode alongside the tap.
+        let emitterDriver = Timer.scheduledTimer(withTimeInterval: 0.008, repeats: true) { [weak scrollController] _ in
+            scrollController?.pumpEmitter()
+        }
+        RunLoop.main.add(emitterDriver, forMode: .common)
+        self.emitterDriver = emitterDriver
 
         // Frontmost-app tracking (Task 18): NSWorkspace activation
         // notifications record which bundle ID is frontmost. Phase 1 only

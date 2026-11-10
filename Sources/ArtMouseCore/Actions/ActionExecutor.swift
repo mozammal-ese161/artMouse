@@ -23,14 +23,23 @@ public final class ActionExecutor: ActionExecuting {
     /// Weak: the executor lives in the router graph alongside its cursor controller,
     /// so a strong reference here would be a cycle (Task 13).
     private weak var cursor: CursorCoordinating?
+    /// Weak for the same cycle reason: the wheel-mode controller is the scroll
+    /// controller, which lives alongside the executor in the router graph (Task 8).
+    private weak var wheel: WheelModeSwitching?
+    /// Scroll events posted by the `.scroll` arm, recorded for tests — asserting
+    /// poster ownership against a live CGEventPoster would inject real HID input.
+    /// No public API added.
+    private(set) var postedScrollEvents: [CGEvent] = []
 
     public init(poster: EventPosting,
                 workspace: WorkspaceOpening = NSWorkspaceOpener(),
                 cursor: CursorCoordinating? = nil,
+                wheel: WheelModeSwitching? = nil,
                 cursorLocation: @escaping () -> CGPoint = { CGEvent(source: nil)?.location ?? .zero }) {
         self.poster = poster
         self.workspace = workspace
         self.cursor = cursor
+        self.wheel = wheel
         self.cursorLocation = cursorLocation
     }
 
@@ -42,8 +51,8 @@ public final class ActionExecutor: ActionExecuting {
             performClick(op, mods: mods)
         case .mission, .music, .zoom, .switcher, .open, .device:
             performAction(action)   // Task 10 replaces this stub dispatch
-        case .scroll:
-            break   // wheel emission wired in Task 8; model introduced in Task 1
+        case .scroll(let spec):
+            performScroll(spec)
         }
     }
 
@@ -132,9 +141,35 @@ public final class ActionExecutor: ActionExecuting {
             cursor?.activateNext(source: .buttonAction)
         case .switchPrecisionMode:
             break   // hold lifecycle, not a tap action
-        case .dpiCycle, .dpiUp, .dpiDown, .dpiShift, .defaultDPI, .switchWheelMode:
-            break   // DPI/wheel ops deferred (phases 2/4); UI disables
+        case .switchWheelMode:
+            wheel?.activateNextWheelMode()   // live (Task 8); Device editor re-enables in Task 10
+        case .dpiCycle, .dpiUp, .dpiDown, .dpiShift, .defaultDPI:
+            break   // DPI ops deferred (phase 4); UI disables
         }
+    }
+
+    /// One bound scroll action → ONE wheel event through the executor's own
+    /// tagged poster (the same source every other arm posts through, so the
+    /// engine tap can skip it). `spec.continuous` is stored for Phase 3's
+    /// hold-routing; it does not change posting here.
+    // SDK adaptation (same ruling as ScrollEmitter.postScroll): this SDK's
+    // wheel init is (scrollWheelEvent2Source:units:wheelCount:wheel1:wheel2:
+    // wheel3:) with Int32 parameters — the plan's variadic CGFloat
+    // wheel:h:0:or:[] overload does not exist here — and wheelCount must be 2
+    // or the constructor ignores wheel2 (horizontal). The int delta fields
+    // truncate, so fractional line amounts are additionally carried on the
+    // 16.16 fixed-point delta fields, the shape the system uses for sub-line
+    // scrolling.
+    private func performScroll(_ spec: ScrollSpec) {
+        let v = spec.direction.axis == .vertical ? spec.direction.sign * spec.lines : 0
+        let h = spec.direction.axis == .horizontal ? spec.direction.sign * spec.lines : 0
+        let event = CGEvent(scrollWheelEvent2Source: nil, units: .line, wheelCount: 2,
+                            wheel1: Int32(v), wheel2: Int32(h), wheel3: 0)!
+        event.setIntegerValueField(.scrollWheelEventFixedPtDeltaAxis1, value: Int64(v * 65536.0))
+        event.setIntegerValueField(.scrollWheelEventFixedPtDeltaAxis2, value: Int64(h * 65536.0))
+        event.flags = CGFlagConversion.cgFlags(spec.mods)
+        poster.post(event)
+        postedScrollEvents.append(event)
     }
 
     /// Down + up pair with the given modifier flags (mission, zoom, app switcher).

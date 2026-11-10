@@ -3,7 +3,7 @@ import Foundation
 /// Resolves native scroll events against the active WheelModeProfile.
 /// All user-facing numbers are clamped HERE (the engine boundary) so absurd
 /// settings can never run away.
-public final class ScrollController: ScrollControlling {
+public final class ScrollController: ScrollControlling, WheelModeSwitching {
     static let accelerationReferenceTicks = 3.0
 
     private let store: SettingsStore
@@ -87,11 +87,10 @@ public final class ScrollController: ScrollControlling {
         }
     }
 
+    /// Thin wrapper over the shared derivation (ScrollDirection.derived) —
+    /// kept as the controller-local name for its call sites above.
     static func direction(axis: ScrollAxis, ticks: Double) -> ScrollDirection {
-        switch axis {
-        case .vertical: return ticks > 0 ? .up : .down
-        case .horizontal: return ticks > 0 ? .right : .left
-        }
+        ScrollDirection.derived(axis: axis, ticks: ticks)
     }
 
     static func scaleOutcome(axis: ScrollAxis, ticks: Double, sens: Double, accel: Double,
