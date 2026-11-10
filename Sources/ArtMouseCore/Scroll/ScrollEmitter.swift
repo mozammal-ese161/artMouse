@@ -222,20 +222,7 @@ public final class ScrollEmitter {
     private func postScroll(direction: ScrollDirection, lines: Double) {
         let v = direction.axis == .vertical ? direction.sign * lines : 0
         let h = direction.axis == .horizontal ? direction.sign * lines : 0
-        // SDK adaptation: this SDK's wheel init is (scrollWheelEvent2Source:
-        // units:wheelCount:wheel1:wheel2:wheel3:) with Int32 wheel parameters
-        // — the plan's variadic CGFloat wheel:h:0:or:[] overload does not
-        // exist here. The int delta fields truncate, so smooth scrolling
-        // emits whole lines (carry scheme in tick(now:)) and any fractional
-        // lines setting (e.g. Constant at 3.5 lines) still carries its true
-        // value on the 16.16 fixed-point delta fields, the same shape the
-        // system uses for sub-line scrolling.
-        // wheelCount must be 2 or the constructor ignores wheel2 (horizontal).
-        let event = CGEvent(scrollWheelEvent2Source: nil, units: .line, wheelCount: 2,
-                            wheel1: Int32(v), wheel2: Int32(h), wheel3: 0)!
-        event.setIntegerValueField(.scrollWheelEventFixedPtDeltaAxis1, value: Int64(v * 65536.0))
-        event.setIntegerValueField(.scrollWheelEventFixedPtDeltaAxis2, value: Int64(h * 65536.0))
-        poster.post(event)
+        poster.post(WheelEventFactory.lineEvent(vertical: v, horizontal: h))
     }
 
     private func postKey(_ keys: WheelKeyEmulation, down: Bool) {

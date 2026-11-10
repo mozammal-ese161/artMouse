@@ -7,6 +7,10 @@ struct MacroStepsEditorView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
+            // Offset identity is deliberate: steps are plain values without stable
+            // IDs, and duplicate steps would collide under \.self. The transient
+            // focus quirk on remove is the accepted trade (the editor is
+            // derive-from-props — no @State to key identity from).
             ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
                 HStack {
                     Text("\(index + 1).").frame(width: 24, alignment: .trailing)

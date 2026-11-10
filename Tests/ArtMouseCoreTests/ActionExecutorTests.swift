@@ -148,6 +148,18 @@ final class ActionExecutorTests: XCTestCase {
         XCTAssertEqual(dpi.beginCalls, 1)
         XCTAssertEqual(dpi.endCalls, 1)
     }
+
+    // Engine-boundary clamp (Phase 3 carry): lines 500 must arrive as ≤ 100
+    // lines on the posted event — an absurd binding must not post runaway
+    // scroll deltas. The fixed-point field carries lines × 65536, so the
+    // read is scaled back (ScrollEmitterTests idiom) before the ≤ 100 check.
+    func testScrollActionLinesClampedAtExecutor() {
+        let executor = ActionExecutor(poster: RecordingPoster())
+        executor.perform(.scroll(ScrollSpec(direction: .down, lines: 500)))
+        let event = executor.postedScrollEvents[0]
+        let fixedPtLines = Double(event.getIntegerValueField(.scrollWheelEventFixedPtDeltaAxis1)) / 65536.0
+        XCTAssertLessThanOrEqual(abs(fixedPtLines), 100.0 + 0.001)
+    }
 }
 
 /// Recording CursorCoordinating fake for the DPI-degradation tests. The suite

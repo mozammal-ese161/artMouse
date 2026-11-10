@@ -187,21 +187,13 @@ public final class ActionExecutor: ActionExecuting {
     /// tagged poster (the same source every other arm posts through, so the
     /// engine tap can skip it). `spec.continuous` is stored for Phase 3's
     /// hold-routing; it does not change posting here.
-    // SDK adaptation (same ruling as ScrollEmitter.postScroll): this SDK's
-    // wheel init is (scrollWheelEvent2Source:units:wheelCount:wheel1:wheel2:
-    // wheel3:) with Int32 parameters — the plan's variadic CGFloat
-    // wheel:h:0:or:[] overload does not exist here — and wheelCount must be 2
-    // or the constructor ignores wheel2 (horizontal). The int delta fields
-    // truncate, so fractional line amounts are additionally carried on the
-    // 16.16 fixed-point delta fields, the shape the system uses for sub-line
-    // scrolling.
     private func performScroll(_ spec: ScrollSpec) {
-        let v = spec.direction.axis == .vertical ? spec.direction.sign * spec.lines : 0
-        let h = spec.direction.axis == .horizontal ? spec.direction.sign * spec.lines : 0
-        let event = CGEvent(scrollWheelEvent2Source: nil, units: .line, wheelCount: 2,
-                            wheel1: Int32(v), wheel2: Int32(h), wheel3: 0)!
-        event.setIntegerValueField(.scrollWheelEventFixedPtDeltaAxis1, value: Int64(v * 65536.0))
-        event.setIntegerValueField(.scrollWheelEventFixedPtDeltaAxis2, value: Int64(h * 65536.0))
+        // Engine-boundary clamp (Phase 3 carry): an absurd lines value must
+        // not post runaway scroll deltas.
+        let lines = Swift.min(Swift.max(spec.lines, 0), 100)
+        let v = spec.direction.axis == .vertical ? spec.direction.sign * lines : 0
+        let h = spec.direction.axis == .horizontal ? spec.direction.sign * lines : 0
+        let event = WheelEventFactory.lineEvent(vertical: v, horizontal: h)
         event.flags = CGFlagConversion.cgFlags(spec.mods)
         poster.post(event)
         postedScrollEvents.append(event)

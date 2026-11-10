@@ -44,7 +44,8 @@ struct DeviceProfileEditorSheet: View {
                 }
                 Section("Parts") {
                     ForEach($draft.parts) { $part in
-                        DevicePartEditorRow(part: $part) {
+                        DevicePartEditorRow(part: $part,
+                                            takenRoutingNumbers: Set(draft.parts.compactMap(\.routesAsButton))) {
                             draft.parts.removeAll { $0.id == part.id }
                         }
                     }
@@ -54,12 +55,19 @@ struct DeviceProfileEditorSheet: View {
                         // the `?? 5` fallback, so the model must agree (a nil
                         // routesAsButton is engine-inert but would still be
                         // displayed as Button 6).
+                        //
+                        // The usage skeleton starts at 3 — the first
+                        // non-left/right button usage: usage 1 is the physical
+                        // left button, and a saved unedited part must not
+                        // claim it (a profile part wins over the
+                        // CG-covered-usage drop rule in the translator).
                         draft.parts.append(DevicePart(
                             name: "Part \(draft.parts.count + 1)",
                             kind: .button,
                             usagePage: HIDUsage.buttonPage,
-                            usage: min(draft.parts.count + 1, 32),
-                            routesAsButton: 5))
+                            usage: min(draft.parts.count + 2, 32),
+                            routesAsButton: Self.nextFreeRoutingNumber(
+                                avoiding: Set(draft.parts.compactMap(\.routesAsButton)))))
                     }
                 }
                 Section {
@@ -95,6 +103,15 @@ struct DeviceProfileEditorSheet: View {
         }
         .frame(minWidth: 640, minHeight: 560)
     }
+
+    /// First routing number in 5...31 that no other part of this profile
+    /// already claims; 5 when every slot is taken (the picker's displayed
+    /// fallback). Two fresh parts both seeding Button 6 would route two
+    /// physical elements into one binding — collision-free seeding keeps
+    /// each part's route distinct.
+    fileprivate static func nextFreeRoutingNumber(avoiding taken: Set<Int>) -> Int {
+        (5...31).first { !taken.contains($0) } ?? 5
+    }
 }
 
 /// One parts-list row: name, kind, HID usage coordinates, and — for button
@@ -102,6 +119,7 @@ struct DeviceProfileEditorSheet: View {
 /// ("Button 6"…"Button 32"). Wheel parts never carry a routing number.
 private struct DevicePartEditorRow: View {
     @Binding var part: DevicePart
+    let takenRoutingNumbers: Set<Int>
     let onRemove: () -> Void
 
     var body: some View {
@@ -113,11 +131,13 @@ private struct DevicePartEditorRow: View {
                 set: { newKind in
                     part.kind = newKind
                     // Wheel parts must not route as a button; button/pedal
-                    // parts always need a target, so give a skeleton one.
+                    // parts always need a target, so give a skeleton one that
+                    // no sibling part already claims.
                     if newKind == .wheel {
                         part.routesAsButton = nil
                     } else if part.routesAsButton == nil {
-                        part.routesAsButton = 5
+                        part.routesAsButton = DeviceProfileEditorSheet
+                            .nextFreeRoutingNumber(avoiding: takenRoutingNumbers)
                     }
                 })) {
                 Text("Button").tag(DevicePartKind.button)

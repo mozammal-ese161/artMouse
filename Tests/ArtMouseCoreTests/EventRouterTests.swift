@@ -250,6 +250,40 @@ final class EventRouterTests: XCTestCase {
         XCTAssertEqual(engine.ran.count, 1)
         XCTAssertEqual(engine.ran[0].1, .extended(7))
     }
+
+    // Phase 3 carry: a chord-captured press defers its binding, so a
+    // click-lock button held inside a capture never reached the coordinator
+    // at down time. When the initiator's release flushes the capture, the
+    // flush's down-then-up pair must drive the full noteDown/noteUp
+    // lifecycle — no stranded sticky state. Pinned against the real
+    // ChordEngine (no chord stub exists); StubClickLock already records
+    // noteDown/noteUp. The third chord button keeps [.fifth, .middle] from
+    // COMPLETING on the middle press (which would fire the chord and clear
+    // the capture, leaving no up-flush to observe).
+    func testChordFlushRunsClickLockLifecycleForFlushedButton() {
+        var settings = GlobalSettings.default
+        settings.buttonBindings = [ButtonBinding(button: .fifth, actions: [.click(.clickLock, [])])]
+        settings.chords = [Chord(buttons: [.fifth, .middle, .fourth],
+                                 actions: [.click(.left, [])], timeout: 10.0)]
+        let settingsStore = store(settings)
+        let clickLock = StubClickLock()
+        let router = EventRouter(settings: settingsStore, executor: RecordingExecutor(),
+                                 clickLock: clickLock, cursor: StubCursor(),
+                                 chords: ChordEngine(settings: settingsStore))
+        XCTAssertEqual(router.handle(.buttonDown(.fifth)), .consume)   // captured
+        XCTAssertTrue(clickLock.downCalls.isEmpty, "capture defers the noteDown")
+        XCTAssertEqual(router.handle(.buttonDown(.middle)), .consume)  // capture extends
+        XCTAssertEqual(router.handle(.buttonUp(.fifth)), .consume)     // initiator release → flush
+        // The flush's down-then-up pair drove the coordinator for the flushed
+        // click-lock button; middle (no click-lock binding) drove none.
+        XCTAssertEqual(clickLock.downCalls.map(\.button), [.fifth])
+        // The second up is the flush's re-sent initiator release re-entering
+        // the click-lock arm (the flush already cleared the router's
+        // membership set, so the still-live binding claims it again) —
+        // benign with the real coordinator, whose idle noteUp posts nothing;
+        // recorded here as the real sequence.
+        XCTAssertEqual(clickLock.upCalls.map(\.button), [.fifth, .fifth])
+    }
 }
 
 final class RecordingExecutor: ActionExecuting {

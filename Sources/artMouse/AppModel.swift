@@ -217,10 +217,11 @@ final class AppModel {
     // an ambiguous row that can never both apply — both are refused.
 
     func addAppProfile(bundleID: String, name: String) {
-        guard !bundleID.isEmpty else { return }
+        let trimmed = bundleID.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
         var settings = store.settings
-        guard !settings.appProfiles.contains(where: { $0.bundleID == bundleID }) else { return }
-        settings.appProfiles.append(AppProfile(bundleID: bundleID, name: name))
+        guard !settings.appProfiles.contains(where: { $0.bundleID == trimmed }) else { return }
+        settings.appProfiles.append(AppProfile(bundleID: trimmed, name: name))
         store.settings = settings
         save()
     }
@@ -238,9 +239,19 @@ final class AppModel {
     }
 
     func updateAppProfile(_ profile: AppProfile) {
+        // Same guards as add: trimmed, non-empty, and no duplicate bundle ID
+        // against OTHER profiles (a duplicate would create an inert loser row
+        // in first-match resolution).
+        var trimmed = profile
+        trimmed.bundleID = profile.bundleID.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.bundleID.isEmpty else { return }
         var settings = store.settings
-        if let index = settings.appProfiles.firstIndex(where: { $0.id == profile.id }) {
-            settings.appProfiles[index] = profile
+        if let index = settings.appProfiles.firstIndex(where: { $0.id == trimmed.id }) {
+            let duplicates = settings.appProfiles.contains {
+                $0.bundleID == trimmed.bundleID && $0.id != trimmed.id
+            }
+            guard !duplicates else { return }
+            settings.appProfiles[index] = trimmed
         }
         store.settings = settings
         save()

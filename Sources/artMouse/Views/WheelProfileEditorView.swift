@@ -51,12 +51,12 @@ struct WheelProfileEditorView: View {
                     .toggleStyle(.checkbox)
                 if profile.smoothScroll {
                     numericField("Smooth step (ms)", value: Double(profile.smoothIntervalMS)) {
-                        onUpdate(copy(smoothIntervalMS: Int($0)))
+                        onUpdate(copy(smoothIntervalMS: safeInt($0, fallback: profile.smoothIntervalMS)))
                     }
                 }
                 if profile.mode == .constant || profile.mode == .auto {
                     numericField("Interval (ms)", value: Double(profile.intervalMS)) {
-                        onUpdate(copy(intervalMS: Int($0)))
+                        onUpdate(copy(intervalMS: safeInt($0, fallback: profile.intervalMS)))
                     }
                 }
                 // Free-spin momentum is a constant-mode feature only: it is
@@ -68,19 +68,19 @@ struct WheelProfileEditorView: View {
                         .toggleStyle(.checkbox)
                     if profile.freeSpinMomentum {
                         numericField("Coast decay (%)", value: Double(profile.momentumDecayPercent)) {
-                            onUpdate(copy(momentumDecayPercent: Int($0)))
+                            onUpdate(copy(momentumDecayPercent: safeInt($0, fallback: profile.momentumDecayPercent)))
                         }
                         numericField("Coast max (notches)", value: Double(profile.momentumMaxTicks)) {
-                            onUpdate(copy(momentumMaxTicks: Int($0)))
+                            onUpdate(copy(momentumMaxTicks: safeInt($0, fallback: profile.momentumMaxTicks)))
                         }
                     }
                 }
                 if profile.mode == .auto {
                     numericField("Auto interval (ms)", value: Double(profile.autoIntervalMS)) {
-                        onUpdate(copy(autoIntervalMS: Int($0)))
+                        onUpdate(copy(autoIntervalMS: safeInt($0, fallback: profile.autoIntervalMS)))
                     }
                     numericField("Auto stop (notches)", value: Double(profile.autoStopTicks)) {
-                        onUpdate(copy(autoStopTicks: Int($0)))
+                        onUpdate(copy(autoStopTicks: safeInt($0, fallback: profile.autoStopTicks)))
                     }
                 }
                 WheelKeysEditorView(emulation: profile.keyEmulation) {

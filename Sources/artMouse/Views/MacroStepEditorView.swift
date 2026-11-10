@@ -1,13 +1,8 @@
 import SwiftUI
 import ArtMouseCore
 
-/// Numeric-field bounds for the conversion below. `format: .number` hands the
-/// setter any Double (e.g. a pasted 25-digit number), and UInt64(...)/Int(...)
-/// TRAP out of range — values are clamped in Double space BEFORE converting.
-/// The keycode ceiling cannot be Double(UInt64.max): that literal rounds UP to
-/// exactly 2^64, which is itself out of UInt64 range and would trap, so it
-/// steps back one representable double (2048 at that magnitude).
-private let maxKeyCodeDouble = Double(UInt64.max) - 2048
+// maxKeyCodeDouble and Double.clamped live in NumericFieldHelpers.swift
+// (Task 9 sweep): this file's conversions were the seed of the shared forms.
 
 struct MacroStepEditorView: View {
     let step: MacroStep
@@ -27,7 +22,7 @@ struct MacroStepEditorView: View {
                         .frame(width: 60)
                 }
                 .frame(width: 110)
-                modChecks("⌘⌃⌥⇧", current: mods) { onChange(.enterKey(keyCode: keyCode, mods: $0)) }
+                modChecks(current: mods) { onChange(.enterKey(keyCode: keyCode, mods: $0)) }
             }
         case .click(let op, let mods):
             HStack {
@@ -41,7 +36,7 @@ struct MacroStepEditorView: View {
                 }
                 .labelsHidden()
                 .frame(width: 90)
-                modChecks("⌘⌃⌥⇧", current: mods) { onChange(.click(op: op, mods: $0)) }
+                modChecks(current: mods) { onChange(.click(op: op, mods: $0)) }
             }
         case .wait(let ms):
             HStack {
@@ -60,7 +55,7 @@ struct MacroStepEditorView: View {
 
     private let modRows: [(String, ModKeys)] = [("⌘", .command), ("⌃", .control), ("⌥", .option), ("⇧", .shift)]
 
-    private func modChecks(_ title: String, current: ModKeys,
+    private func modChecks(current: ModKeys,
                            onChange: @escaping (ModKeys) -> Void) -> some View {
         HStack {
             ForEach(modRows, id: \.1) { item in
@@ -74,18 +69,5 @@ struct MacroStepEditorView: View {
                     .toggleStyle(.checkbox)
             }
         }
-    }
-}
-
-/// Clamp in Double space so an out-of-range integer conversion can never run.
-/// NaN compares false against everything, so it is routed to the range's
-/// lower bound explicitly: `Swift.max(nan, 0)` propagates NaN in this helper's
-/// argument order and the conversion would trap again ("cannot be converted…
-/// infinite or NaN") — the pre-fix `max(0, value)` form absorbed NaN only by
-/// accident of its argument order. ±inf lands on the lower bound too; either
-/// extreme is an acceptable landing spot for a pasted "inf".
-private extension Double {
-    func clamped(_ range: ClosedRange<Double>) -> Double {
-        isFinite ? Swift.min(Swift.max(self, range.lowerBound), range.upperBound) : range.lowerBound
     }
 }

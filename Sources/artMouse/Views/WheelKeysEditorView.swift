@@ -15,7 +15,8 @@ struct WheelKeysEditorView: View {
         if let emulation {
             TextField("Key code", value: Binding(
                 get: { Double(emulation.keyCode) },
-                set: { onChange(WheelKeyEmulation(keyCode: UInt64(max(0, $0)), mods: emulation.mods,
+                set: { onChange(WheelKeyEmulation(keyCode: UInt64($0.clamped(0...maxKeyCodeDouble)),
+                                                  mods: emulation.mods,
                                                   repeatWhileRolling: emulation.repeatWhileRolling)) }),
                 format: .number)
                 .frame(width: 70)
