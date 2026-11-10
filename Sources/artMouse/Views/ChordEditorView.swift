@@ -29,7 +29,9 @@ struct ChordEditorView: View {
                 .foregroundStyle(.secondary)
             HStack {
                 Text("Action:").font(.caption)
-                ActionEditorView(action: chord.actions.first) { newAction in
+                // Chord actions fire via executor.perform, whose .macro arm is
+                // a no-op — macros are button-only, so the picker omits them.
+                ActionEditorView(action: chord.actions.first, allowsMacro: false) { newAction in
                     onUpdate(chord(actions: newAction.map { [$0] } ?? []))
                 }
             }

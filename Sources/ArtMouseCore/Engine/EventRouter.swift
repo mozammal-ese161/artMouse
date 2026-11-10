@@ -282,4 +282,14 @@ public final class EventRouter: EventRouting {
 
         return .consume
     }
+
+    /// Tap-loss teardown (bootstrap sink): when the tap is disabled mid-run the
+    /// button-up that stops a hold-mode macro never arrives, so the engine is
+    /// stopped wholesale (`MacroEngine.stopAll`) and this companion call drops
+    /// the router's hold registry. Without it every stranded button would keep
+    /// consuming its late up as a stop for an already-dead program. No
+    /// per-button engine calls here — stopAll covers the engine side.
+    public func clearMacroHolds() {
+        macroHeldButtons.removeAll()
+    }
 }

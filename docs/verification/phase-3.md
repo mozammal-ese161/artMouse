@@ -46,6 +46,8 @@ HOW TO VERIFY line.
   HOW TO VERIFY: create a Constant-mode wheel profile, set Safari's app-profile Wheel picker to it, and scroll in Safari (fixed distance per notch) versus TextEdit (stock acceleration feel) — the feel must switch per frontmost app with no relaunch.
 - [ ] Import/export: export, wipe bindings, import — everything returns.
   HOW TO VERIFY: General tab → Export Settings… to a JSON file, unbind a few buttons (file rewritten), then Import Settings… from that file — every binding, chord, wheel profile and app profile must come back and survive a relaunch. (The round-trip decode contract is unit-tested: `testExportImportRoundTrip`; the garbage-import safety contract is `testImportGarbageLeavesSettingsUntouched`.)
+- [ ] Chord or scroll binding with a Macro action: picker must NOT offer Macro (button-only); verify the chord editor shows no Macro option.
+  HOW TO VERIFY: Settings → Chords, open a chord's action picker — no "Macro" entry may be listed; do the same on the Scroll Bindings tab for every axis/direction row. If a stored macro arrives via import/hand-edited settings, the chord/scroll editor shows a "Macros are button-only" caption instead of the macro editor. The Buttons tab picker still lists Macro.
 - [ ] Sleep/wake: macros and snapping still work after wake.
   HOW TO VERIFY: with a macro and a Snap binding set up, sleep the Mac from the Apple menu, wake it, and trigger both as the first actions — both must work with no relaunch (the CGEvent/tap re-enable logic only exercises on real hardware).
 - [ ] Phase-1/2 regression spot-check: click binding, cursor profiles, reverse scroll, a chord.

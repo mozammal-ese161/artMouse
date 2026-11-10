@@ -29,6 +29,11 @@ final class EngineBootstrap {
     /// be assigned from start(), and the poster it shares is created there —
     /// optional var matches this class's idiom for engine-owned objects.
     private var snappingController: SnappingController?
+    /// Hoisted for the same reason as `snappingController`: the tap-loss sink
+    /// below must stop every running macro program when the tap dies (the
+    /// button-up that stops a hold-mode loop would otherwise never arrive,
+    /// leaving the loop repeating at its 10 ms interval floor forever).
+    private var macroEngine: MacroEngine?
     private var cancellable: AnyCancellable?
 
     /// Safety-restore warning mirrored from the cursor controller on every
@@ -69,6 +74,7 @@ final class EngineBootstrap {
         // Button-bound macros share the same poster so their synthetic keys
         // and clicks carry the private-source tag too (loop protection).
         let macroEngine = MacroEngine(poster: poster)
+        self.macroEngine = macroEngine
         // Snapping shares the poster for the same loop-protection reason: the
         // warp-and-click events it posts must carry the private-source tag.
         let snappingController = SnappingController(finder: AXDefaultButtonFinder(), poster: poster)
@@ -94,12 +100,21 @@ final class EngineBootstrap {
         // replayed current value is the post-start `true` and the sink never
         // reports a loss that never happened. `receive(on:)` hops the emitted
         // values onto the main run loop, where PermissionsController is used.
+        // The loss ALSO strands hold-mode macros: with the tap gone, the
+        // button-up that stops the loop never reaches the router, so the
+        // program would repeat indefinitely (interval clamped to >= 10 ms)
+        // with no input path to stop it. The sink therefore kills every
+        // running program and clears the router's hold registry so each
+        // stranded button's late up routes natively. The router stays alive
+        // through the tap engine, hence the weak capture.
         cancellable = tapEngine.$tapActive
             .receive(on: RunLoop.main)
-            .sink { [weak permissions] active in
+            .sink { [weak self, weak permissions, weak router] active in
                 if !active {
                     permissions?.refresh()
                     permissions?.reportTapCreation(false)
+                    self?.macroEngine?.stopAll()
+                    router?.clearMacroHolds()
                 }
             }
 

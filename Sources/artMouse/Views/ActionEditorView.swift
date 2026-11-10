@@ -4,6 +4,13 @@ import ArtMouseCore
 struct ActionEditorView: View {
     let action: Action?
     let onChange: (Action?) -> Void
+    /// Macros only fire from button bindings (the router runs the whole
+    /// program on button-down; chord `.fire` and scroll bindings go through
+    /// `executor.perform`, whose `.macro` arm is a silent no-op). Call sites
+    /// where macros are inert pass `false` to hide the category; a macro
+    /// already stored there (imported/hand-edited settings) renders as a
+    /// caption instead of an editor so the inert binding stays visible.
+    var allowsMacro: Bool = true
 
     var body: some View {
         HStack {
@@ -22,6 +29,10 @@ struct ActionEditorView: View {
         case .open(let target): OpenActionEditorView(target: target, onChange: onChange)
         case .device(let op): DeviceActionEditorView(op: op, onChange: onChange)
         case .scroll(let spec): ScrollActionEditorView(spec: spec, onChange: onChange)
+        case .macro(_, _, _, _) where !allowsMacro:
+            Text("Macros are button-only; this action will not fire.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         case .macro(let steps, let repeatMode, let intervalMS, let proxy):
             MacroActionEditorView(steps: steps, repeatMode: repeatMode,
                                   repeatIntervalMS: intervalMS, modifierProxy: proxy,
@@ -38,12 +49,19 @@ struct ActionEditorView: View {
         Picker("", selection: Binding(
             get: { action.map(ActionCategory.init) ?? .none },
             set: { onChange($0.initialAction) })) {
-            ForEach(ActionCategory.allCases, id: \.self) { category in
+            ForEach(availableCategories, id: \.self) { category in
                 Text(category.label).tag(category)
             }
         }
         .labelsHidden()
         .frame(width: 110)
+    }
+
+    /// The picker never offers Macro where a macro could not fire; a stored
+    /// macro still maps to `.macro` in the picker's selection (showing its
+    /// label) even though the category is not listed.
+    private var availableCategories: [ActionCategory] {
+        ActionCategory.allCases.filter { allowsMacro || $0 != .macro }
     }
 }
 

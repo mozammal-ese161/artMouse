@@ -12,6 +12,9 @@ struct GeneralTabView: View {
             if let error = model.lastImportError {
                 Text(error).font(.caption).foregroundStyle(.red)
             }
+            if let error = model.lastExportError {
+                Text(error).font(.caption).foregroundStyle(.red)
+            }
             Spacer()
         }
         .padding(.top, 8)

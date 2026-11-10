@@ -211,12 +211,21 @@ final class AppModel {
     // so the user's settings survive a bad file untouched.
 
     private(set) var lastImportError: String?
+    /// Surfaced next to the import error in the General tab: a failed export
+    /// (unwritable location, disk full) must not look identical to success.
+    private(set) var lastExportError: String?
 
     func exportSettings() {
         let panel = NSSavePanel()
         panel.nameFieldStringValue = "artMouse-settings.json"
-        if panel.runModal() == .OK, let url = panel.url {
-            try? store.exportData().write(to: url)
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            let data = try store.exportData()
+            // Atomic: a half-written backup file must never be created.
+            try data.write(to: url, options: .atomic)
+            lastExportError = nil
+        } catch {
+            lastExportError = "Export failed: \(error.localizedDescription)"
         }
     }
 

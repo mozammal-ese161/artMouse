@@ -80,10 +80,26 @@ public final class SnappingController: SnappingPerforming {
 
 /// Real AX reader: system-wide element → focused window → default button.
 public final class AXDefaultButtonFinder: AXButtonFinding {
-    public init() {}
+    /// One element created in init and reused for every read: the bounded
+    /// messaging timeout set below is PER-ELEMENT, so creating a fresh
+    /// system-wide element per call would silently revert to the default
+    /// (~6 s) timeout and undo the bound.
+    private let systemWide: AXUIElement
+
+    public init() {
+        let element = AXUIElementCreateSystemWide()
+        // Snapping performs INLINE in the event-tap callback
+        // (router → executor → defaultButtonFrame). AXUIElementCopyAttributeValue
+        // is Mach IPC to the frontmost app's AX server, so a beach-balled app
+        // would otherwise block the whole input pipeline for up to the default
+        // ~6 s messaging timeout and risk the tap being disabled by that
+        // timeout. 250 ms bounds the worst case while leaving plenty of room
+        // for a healthy app to answer.
+        AXUIElementSetMessagingTimeout(element, 0.25)
+        self.systemWide = element
+    }
 
     public func defaultButtonFrame() -> AXFrame? {
-        let systemWide = AXUIElementCreateSystemWide()
         var window: CFTypeRef?
         guard AXUIElementCopyAttributeValue(systemWide, kAXFocusedWindowAttribute as CFString, &window) == .success,
               let windowElement = window else { return nil }

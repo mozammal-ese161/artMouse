@@ -1,6 +1,14 @@
 import SwiftUI
 import ArtMouseCore
 
+/// Numeric-field bounds for the conversion below. `format: .number` hands the
+/// setter any Double (e.g. a pasted 25-digit number), and UInt64(...)/Int(...)
+/// TRAP out of range — values are clamped in Double space BEFORE converting.
+/// The keycode ceiling cannot be Double(UInt64.max): that literal rounds UP to
+/// exactly 2^64, which is itself out of UInt64 range and would trap, so it
+/// steps back one representable double (2048 at that magnitude).
+private let maxKeyCodeDouble = Double(UInt64.max) - 2048
+
 struct MacroStepEditorView: View {
     let step: MacroStep
     let onChange: (MacroStep) -> Void
@@ -13,7 +21,8 @@ struct MacroStepEditorView: View {
                 LabeledContent("Code") {
                     TextField("", value: Binding(
                         get: { Double(keyCode) },
-                        set: { onChange(.enterKey(keyCode: UInt64(max(0, $0)), mods: mods)) }),
+                        set: { onChange(.enterKey(keyCode: UInt64($0.clamped(0...maxKeyCodeDouble)),
+                                                  mods: mods)) }),
                         format: .number)
                         .frame(width: 60)
                 }
@@ -40,7 +49,8 @@ struct MacroStepEditorView: View {
                 LabeledContent("ms") {
                     TextField("", value: Binding(
                         get: { Double(ms) },
-                        set: { onChange(.wait(milliseconds: Int(max(1, $0))) ) }), format: .number)
+                        set: { onChange(.wait(milliseconds: Int($0.clamped(1...60_000))) ) }),
+                        format: .number)
                         .frame(width: 60)
                 }
                 .frame(width: 110)
@@ -64,5 +74,12 @@ struct MacroStepEditorView: View {
                     .toggleStyle(.checkbox)
             }
         }
+    }
+}
+
+/// Clamp in Double space so an out-of-range integer conversion can never run.
+private extension Double {
+    func clamped(_ range: ClosedRange<Double>) -> Double {
+        Swift.min(Swift.max(self, range.lowerBound), range.upperBound)
     }
 }

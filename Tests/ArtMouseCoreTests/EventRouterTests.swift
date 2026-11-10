@@ -435,4 +435,22 @@ final class RouterMacroTests: XCTestCase {
         XCTAssertEqual(router.handle(.buttonUp(.fourth)), .passThrough)
         XCTAssertEqual(engine.stopped, [])
     }
+
+    // Tap-loss wiring (bootstrap sink): when the tap dies mid-hold, the
+    // button-up that would stop a hold-mode macro never arrives. The sink
+    // therefore stops the engine wholesale (stopAll — app-target code, not
+    // unit-testable) AND clears the router's hold registry, so the stranded
+    // button's late up routes natively instead of re-stopping an already-dead
+    // program. This test pins the router half of that contract.
+    func testTapLossClearsMacroHolds() {
+        let engine = RecordingMacroEngine()
+        let action = Action.macro(steps: [.enterKey(keyCode: 5, mods: [])], repeatMode: .hold,
+                                  repeatIntervalMS: 100, modifierProxy: false)
+        let router = EventRouter(settings: macroStore(action), executor: RecordingExecutor(),
+                                 clickLock: StubClickLock(), cursor: StubCursor(), macros: engine)
+        XCTAssertEqual(router.handle(.buttonDown(.fourth)), .consume)
+        router.clearMacroHolds()
+        XCTAssertEqual(router.handle(.buttonUp(.fourth)), .passThrough)
+        XCTAssertEqual(engine.stopped, [], "engine side is handled by stopAll at bootstrap level, not per-button")
+    }
 }
