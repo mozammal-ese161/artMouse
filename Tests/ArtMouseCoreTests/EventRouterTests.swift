@@ -216,6 +216,40 @@ final class EventRouterTests: XCTestCase {
         // Global binding is [.none] (non-empty → matched → .consume, performing nothing)
         XCTAssertEqual(router.handle(.buttonUp(.fourth)), .consume)
     }
+
+    // Task 5 pin: buttons 6+ route through the SAME chord arm as standard
+    // buttons — the capture consumes the press and the chord fires on
+    // completion. Pinned against the real ChordEngine (no stub exists for it).
+    func testExtendedButtonChordCapturesAndFires() {
+        let executor = RecordingExecutor()
+        var settings = GlobalSettings.default
+        settings.chords = [Chord(buttons: [.extended(5), .extended(6)],
+                                 actions: [.mission(.missionControl, reverse: false)],
+                                 timeout: 1.0)]
+        let settingsStore = store(settings)
+        let engine = ChordEngine(settings: settingsStore)
+        let router = EventRouter(settings: settingsStore, executor: executor,
+                                 clickLock: StubClickLock(), cursor: StubCursor(), chords: engine)
+        XCTAssertEqual(router.handle(.buttonDown(.extended(5))), .consume)
+        XCTAssertEqual(router.handle(.buttonDown(.extended(6))), .consume)
+        XCTAssertEqual(executor.performed, [.mission(.missionControl, reverse: false)])
+    }
+
+    // Task 5 pin: an extended button with a single-action macro binding runs
+    // the program on down, exactly like standard buttons.
+    func testExtendedButtonMacroRunsProgram() {
+        let engine = RecordingMacroEngine()
+        var settings = GlobalSettings.default
+        settings.buttonBindings = [ButtonBinding(button: .extended(7), actions: [
+            Action.macro(steps: [.enterKey(keyCode: 36, mods: [])], repeatMode: .none,
+                         repeatIntervalMS: 0, modifierProxy: false),
+        ])]
+        let router = EventRouter(settings: store(settings), executor: RecordingExecutor(),
+                                 clickLock: StubClickLock(), cursor: StubCursor(), macros: engine)
+        XCTAssertEqual(router.handle(.buttonDown(.extended(7))), .consume)
+        XCTAssertEqual(engine.ran.count, 1)
+        XCTAssertEqual(engine.ran[0].1, .extended(7))
+    }
 }
 
 final class RecordingExecutor: ActionExecuting {
@@ -261,6 +295,16 @@ final class StubCursor: CursorControlling {
 final class StubWatcher: FrontmostProviding {
     var frontmostBundleID: String?
     init(bundleID: String?) { self.frontmostBundleID = bundleID }
+}
+
+/// Recording macro coordinator. Moved to file scope (Phase 4 Task 5) so the
+/// extended-button pin in EventRouterTests reuses the same double instead of
+/// duplicating it; behavior unchanged.
+final class RecordingMacroEngine: MacroCoordinating {
+    private(set) var ran: [(MacroProgram, ButtonID)] = []
+    private(set) var stopped: [ButtonID] = []
+    func run(program: MacroProgram, for button: ButtonID) { ran.append((program, button)) }
+    func stop(for button: ButtonID) { stopped.append(button) }
 }
 
 final class RouterChordTests: XCTestCase {
@@ -388,13 +432,6 @@ final class RouterChordTests: XCTestCase {
 }
 
 final class RouterMacroTests: XCTestCase {
-    final class RecordingMacroEngine: MacroCoordinating {
-        private(set) var ran: [(MacroProgram, ButtonID)] = []
-        private(set) var stopped: [ButtonID] = []
-        func run(program: MacroProgram, for button: ButtonID) { ran.append((program, button)) }
-        func stop(for button: ButtonID) { stopped.append(button) }
-    }
-
     private func macroStore(_ action: Action) -> SettingsStore {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

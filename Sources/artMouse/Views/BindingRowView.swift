@@ -7,7 +7,16 @@ struct BindingRowView: View {
 
     var body: some View {
         HStack(alignment: .top) {
-            Text(label).frame(width: 90, alignment: .leading).font(.body.weight(.medium))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label).font(.body.weight(.medium))
+                // Device-profile part name ("Thumb 1") for extended buttons;
+                // absent for standard buttons and unnamed numbers, keeping
+                // those rows exactly as before.
+                if let partName = model.partName(for: button) {
+                    Text(partName).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            .frame(width: 90, alignment: .leading)
             ActionEditorView(action: currentAction) { newAction in
                 model.setBinding(button, action: newAction)
             }

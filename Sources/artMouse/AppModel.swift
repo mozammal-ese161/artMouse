@@ -58,6 +58,30 @@ final class AppModel {
         save()
     }
 
+    /// Creates an empty binding for an extended button so its row appears in
+    /// the Buttons tab (idempotent). The empty-actions shape is behaviorally
+    /// inert in the engine (bindings with no actions never match), so adding
+    /// a row cannot strand the button — the Phase 1 zombie-binding fix holds.
+    func ensureBinding(for button: ButtonID) {
+        guard binding(for: button) == nil else { return }
+        var settings = store.settings
+        settings.buttonBindings.append(ButtonBinding(button: button, actions: []))
+        store.settings = settings
+        save()
+    }
+
+    /// Device-profile part name for an extended button ("Thumb 1"), shown as
+    /// a caption in the Buttons tab; nil when no profile names this number.
+    func partName(for button: ButtonID) -> String? {
+        guard case .extended(let number) = button else { return nil }
+        for profile in store.settings.deviceProfiles {
+            if let part = profile.parts.first(where: { $0.routesAsButton == number }) {
+                return part.name
+            }
+        }
+        return nil
+    }
+
     /// Unlike buttons, an existing scroll binding set to nil keeps the
     /// binding with empty actions: the router filters empty scroll bindings,
     /// and the UI keeps the row visible so the user can re-bind or Clear it.

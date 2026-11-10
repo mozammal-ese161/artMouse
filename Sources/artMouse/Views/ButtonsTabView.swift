@@ -14,8 +14,24 @@ struct ButtonsTabView: View {
     }
 
     var body: some View {
-        List(buttons, id: \.self) { button in
-            BindingRowView(model: model, button: button)
+        List {
+            Section {
+                ForEach(buttons, id: \.self) { button in
+                    BindingRowView(model: model, button: button)
+                }
+            } header: {
+                HStack {
+                    Text("Buttons")
+                    Spacer()
+                    Menu("Add…") {
+                        ForEach(5...31, id: \.self) { number in
+                            Button("Button \(number + 1)") {
+                                model.ensureBinding(for: .extended(number))
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
