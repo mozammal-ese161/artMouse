@@ -39,6 +39,8 @@ public struct GlobalSettings: Codable, Equatable {
     public var scrollBindings: [ScrollBinding]
     public var chords: [Chord]
     public var appProfiles: [AppProfile]
+    public var deviceProfiles: [DeviceProfile]
+    public var disabledDeviceKeys: [String]
 
     public static let `default` = GlobalSettings(
         schemaVersion: 1,
@@ -57,7 +59,9 @@ public struct GlobalSettings: Codable, Equatable {
         activeWheelModeProfileID: nil,
         scrollBindings: [],
         chords: [],
-        appProfiles: []
+        appProfiles: [],
+        deviceProfiles: [],
+        disabledDeviceKeys: []
     )
 }
 
@@ -81,6 +85,9 @@ extension GlobalSettings {
         chords = try c.decodeIfPresent([Chord].self, forKey: .chords) ?? []
         // Phase 3 field: absent in Phase 1/2 files → empty defaults (backward compat).
         appProfiles = try c.decodeIfPresent([AppProfile].self, forKey: .appProfiles) ?? []
+        // Phase 4 fields: absent in earlier files → empty defaults (backward compat).
+        deviceProfiles = try c.decodeIfPresent([DeviceProfile].self, forKey: .deviceProfiles) ?? []
+        disabledDeviceKeys = try c.decodeIfPresent([String].self, forKey: .disabledDeviceKeys) ?? []
     }
 }
 
@@ -138,5 +145,17 @@ public extension GlobalSettings {
         if let id = appProfile(for: bundleID)?.wheelModeProfileID,
            let match = wheelModeProfiles.first(where: { $0.id == id }) { return match }
         return activeWheelProfile
+    }
+}
+
+public extension GlobalSettings {
+    /// Device-profile resolution by VID/PID: first matching profile.
+    func deviceProfile(matchingVendor vendorID: Int, productID: Int) -> DeviceProfile? {
+        deviceProfiles.first { $0.vendorID == vendorID && $0.productID == productID }
+    }
+
+    /// Enable/disable set (spec §6 group 6); keyed by `HIDDeviceIdentity.settingsKey`.
+    func isDeviceDisabled(vendorID: Int, productID: Int) -> Bool {
+        disabledDeviceKeys.contains(HIDDeviceIdentity.settingsKey(vendorID: vendorID, productID: productID))
     }
 }
