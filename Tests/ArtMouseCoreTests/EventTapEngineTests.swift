@@ -164,3 +164,26 @@ final class MockTapFactory: EventTapCreating {
 struct FailingTapFactory: EventTapCreating {
     func createTap(mask: CGEventMask, callback: @escaping (CGEvent, CGEventType) -> CGEvent?) -> EventTapHandle? { nil }
 }
+
+struct ScrollScalingRouter: EventRouting {
+    func handle(_ event: InputEvent) -> RouterOutcome {
+        if case .scrolled = event { return .scrollTransform(verticalFactor: 2, horizontalFactor: -1) }
+        return .passThrough
+    }
+}
+
+final class EventTapEngineScrollTests: XCTestCase {
+    func testScrollTransformScalesAxisDeltas() {
+        let tap = MockTap()
+        let engine = EventTapEngine(router: ScrollScalingRouter(), tapFactory: MockTapFactory(tap: tap))
+        XCTAssertTrue(engine.start())
+        // SDK adaptation: this SDK's init is (scrollWheelEvent2Source:units:wheelCount:wheel1:wheel2:wheel3:);
+        // Axis1 carries the wheel ticks (3), Axis2 is set explicitly to 1.
+        let event = CGEvent(scrollWheelEvent2Source: nil, units: .line, wheelCount: 1, wheel1: 3, wheel2: 0, wheel3: 0)!
+        event.setDoubleValueField(.scrollWheelEventDeltaAxis2, value: 1)
+        let result = tap.emit(event, type: .scrollWheel)
+        XCTAssertTrue(result === event)
+        XCTAssertEqual(event.getDoubleValueField(.scrollWheelEventDeltaAxis1), 6, accuracy: 1e-9)
+        XCTAssertEqual(event.getDoubleValueField(.scrollWheelEventDeltaAxis2), -1, accuracy: 1e-9)
+    }
+}

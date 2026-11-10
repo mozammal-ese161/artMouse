@@ -117,6 +117,12 @@ public final class EventTapEngine {
             event.setIntegerValueField(.mouseEventDeltaX, value: Int64((Double(dx) * dxFactor).rounded()))
             event.setIntegerValueField(.mouseEventDeltaY, value: Int64((Double(dy) * dyFactor).rounded()))
             return event
+        case .scrollTransform(let vFactor, let hFactor):
+            let v = event.getDoubleValueField(.scrollWheelEventDeltaAxis1)
+            let h = event.getDoubleValueField(.scrollWheelEventDeltaAxis2)
+            event.setDoubleValueField(.scrollWheelEventDeltaAxis1, value: v * vFactor)
+            event.setDoubleValueField(.scrollWheelEventDeltaAxis2, value: h * hFactor)
+            return event
         }
     }
 }
