@@ -10,6 +10,7 @@ public enum Action: Hashable, Codable {
     case switcher(SwitcherOp)
     case open(OpenTarget)
     case device(DeviceOp)
+    case scroll(ScrollSpec)
 
     /// Hold actions activate on button-down and revert on button-up.
     public var isHoldAction: Bool {

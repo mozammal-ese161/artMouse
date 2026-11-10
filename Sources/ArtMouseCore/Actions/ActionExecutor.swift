@@ -42,6 +42,8 @@ public final class ActionExecutor: ActionExecuting {
             performClick(op, mods: mods)
         case .mission, .music, .zoom, .switcher, .open, .device:
             performAction(action)   // Task 10 replaces this stub dispatch
+        case .scroll:
+            break   // wheel emission wired in Task 8; model introduced in Task 1
         }
     }
 

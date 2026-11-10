@@ -32,4 +32,30 @@ final class ActionModelTests: XCTestCase {
         XCTAssertFalse(Action.click(.left, []).isHoldAction)
         XCTAssertFalse(Action.device(.activateCursorSpeed(nil)).isHoldAction)
     }
+
+    func testScrollDirectionAxisAndSign() {
+        XCTAssertEqual(ScrollDirection.up.axis, .vertical)
+        XCTAssertEqual(ScrollDirection.down.axis, .vertical)
+        XCTAssertEqual(ScrollDirection.left.axis, .horizontal)
+        XCTAssertEqual(ScrollDirection.right.axis, .horizontal)
+        XCTAssertEqual(ScrollDirection.up.sign, 1)
+        XCTAssertEqual(ScrollDirection.down.sign, -1)
+        XCTAssertEqual(ScrollDirection.right.sign, 1)
+        XCTAssertEqual(ScrollDirection.left.sign, -1)
+    }
+
+    func testActionScrollCodableRoundTrip() throws {
+        let spec = ScrollSpec(direction: .down, mods: [.shift], lines: 5, intervalMS: 50, continuous: true)
+        let original: [Action] = [.scroll(spec)]
+        let data = try JSONEncoder().encode(original)
+        XCTAssertEqual(try JSONDecoder().decode([Action].self, from: data), original)
+    }
+
+    func testChordCodableRoundTripAndDefaults() throws {
+        var chord = Chord(id: UUID(), buttons: [.middle, .fourth], actions: [.mission(.missionControl, reverse: false)])
+        XCTAssertEqual(chord.timeout, 0.3, accuracy: 1e-12)
+        chord.timeout = 0.5
+        let data = try JSONEncoder().encode(chord)
+        XCTAssertEqual(try JSONDecoder().decode(Chord.self, from: data), chord)
+    }
 }

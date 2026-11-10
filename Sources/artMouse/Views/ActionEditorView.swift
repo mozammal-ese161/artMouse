@@ -21,6 +21,8 @@ struct ActionEditorView: View {
         case .switcher(let op): SwitcherActionEditorView(op: op, onChange: onChange)
         case .open(let target): OpenActionEditorView(target: target, onChange: onChange)
         case .device(let op): DeviceActionEditorView(op: op, onChange: onChange)
+        // Interim placeholder: the Scroll category + editor land in Task 10.
+        case .some(.scroll): Text("Scroll").foregroundStyle(.secondary)
         // SDK adaptation: `Action` has its own `.none` case, so a bare `case .none`
         // binds to `Optional.none` (nil) and the wrapped `Action.none` payload
         // needs its own pattern; both mean "no action" and render as Unbound.
@@ -67,6 +69,7 @@ enum ActionCategory: CaseIterable {
         case .switcher: self = .switcher
         case .open: self = .open
         case .device: self = .device
+        case .scroll: self = .none   // interim: Scroll category lands in Task 10
         }
     }
 
