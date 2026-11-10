@@ -5,12 +5,34 @@ struct DeviceAnalyzerSheet: View {
     let device: HIDDeviceIdentity
     let model: AppModel
     @Environment(\.dismiss) private var dismiss
+    /// Local mirror of `deviceLog.persistToFile`: HIDEventLog is not
+    /// @Observable, so a binding reading it directly has no invalidation
+    /// source and the toggle would never re-render after its own set. The
+    /// sheet owns the mirror while open (the log's state cannot change
+    /// behind it — the pump only appends entries) and writes through the
+    /// model mutator.
+    @State private var persistToFile: Bool
+
+    init(device: HIDDeviceIdentity, model: AppModel) {
+        self.device = device
+        self.model = model
+        _persistToFile = State(initialValue: model.deviceLog?.persistToFile ?? false)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             HStack {
                 Text("Analyzing \(device.name)").font(.headline)
                 Spacer()
+                // Device Log persistence (spec §6 group 6). Switch style to
+                // match the Devices row's Enabled switch.
+                Toggle("Save to log file", isOn: Binding(
+                    get: { persistToFile },
+                    set: {
+                        persistToFile = $0
+                        model.setDeviceLogPersist($0)
+                    }))
+                    .toggleStyle(.switch)
                 Button("Clear") { model.hidAnalyzer?.clear() }
                 Button("Done") { dismiss() }
             }
