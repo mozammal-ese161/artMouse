@@ -1116,7 +1116,12 @@ private func handleScroll(axis: ScrollAxis, ticks: Double) -> RouterOutcome {
         for action in binding.actions { executor.perform(action) }
         return .consume
     }
-    return scroll?.disposition(forScroll: axis, ticks: ticks) ?? .passThrough
+    guard let scroll = scroll else { return .passThrough }
+    switch scroll.disposition(forScroll: axis, ticks: ticks) {
+    case .passThrough: return .passThrough
+    case .scale(let v, let h): return .scrollTransform(verticalFactor: v, horizontalFactor: h)
+    case .intercept: return .consume
+    }
 }
 
 private func scrollBinding(axis: ScrollAxis, ticks: Double) -> ScrollBinding? {
