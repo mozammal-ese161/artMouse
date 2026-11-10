@@ -17,6 +17,7 @@ public enum Action: Hashable, Codable {
     /// Hold actions activate on button-down and revert on button-up.
     public var isHoldAction: Bool {
         if case .device(.switchPrecisionMode) = self { return true }
+        if case .device(.dpiShift) = self { return true }
         return false
     }
 

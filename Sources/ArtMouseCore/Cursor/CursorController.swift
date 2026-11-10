@@ -9,6 +9,9 @@ public enum ProfileSwitchSource: Equatable {
 /// (Task 13); kept separate from the router's `CursorControlling` transform API.
 public protocol CursorCoordinating: AnyObject {
     func activateNext(source: ProfileSwitchSource)
+    /// Spec §3 DPI degradation target: the profile named "Default", else the
+    /// first profile (used when a DPI report cannot be sent).
+    func activateDefault()
     func beginPrecision()
     func endPrecision()
 }
@@ -83,6 +86,16 @@ public final class CursorController: CursorControlling, CursorCoordinating {
               let index = profiles.firstIndex(where: { $0.id == current.id }) else { return }
         let next = profiles[(index + 1) % profiles.count]
         activate(profileID: next.id, source: source)
+    }
+
+    /// Spec §3 DPI degradation target: the profile named "Default", else the
+    /// first profile.
+    public func activateDefault() {
+        if let named = store.settings.cursorSpeedProfiles.first(where: { $0.name == "Default" }) {
+            activate(profileID: named.id, source: .buttonAction)
+        } else if let first = store.settings.cursorSpeedProfiles.first {
+            activate(profileID: first.id, source: .buttonAction)
+        }
     }
 
     public func beginPrecision() { precisionActive = true }

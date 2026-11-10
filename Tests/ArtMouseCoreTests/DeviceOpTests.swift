@@ -41,6 +41,7 @@ final class DeviceOpTests: XCTestCase {
         executor.perform(.device(.dpiShift))
         executor.perform(.device(.defaultDPI))
         executor.perform(.device(.switchWheelMode))
-        // no crash, no state change; UI disables these (Task 16)
+        // no crash, no state change; with no cursor coordinator the DPI
+        // degradation (Task 7) and wheel-mode arm are no-ops
     }
 }

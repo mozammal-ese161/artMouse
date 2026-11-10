@@ -106,6 +106,82 @@ final class ActionExecutorTests: XCTestCase {
     func testFlagConversion() {
         XCTAssertEqual(CGFlagConversion.cgFlags([.command, .shift]), CGEventFlags.maskCommand.union(.maskShift))
     }
+
+    // DPI arms (Task 7): a nil coordinator or a failed report send degrades to
+    // cursor-speed profile switching (spec §3); a successful apply must not
+    // touch the cursor; dpiShift is a hold (beganHold/endedHold) action.
+    func testDPICycleDegradesToCursorCycleWhenUnavailable() {
+        let cursor = RecordingCursor()
+        let executor = ActionExecutor(poster: RecordingPoster(), cursor: cursor)
+        executor.perform(.device(.dpiCycle))
+        XCTAssertEqual(cursor.activatedNextCalls, 1)
+    }
+
+    func testDPIDegradationWhenReportSendFails() {
+        let cursor = RecordingCursor()
+        let failingDPI = StubDPI(applies: false)
+        let executor = ActionExecutor(poster: RecordingPoster(), cursor: cursor, dpi: failingDPI)
+        executor.perform(.device(.dpiUp))
+        XCTAssertEqual(cursor.activatedNextCalls, 1)
+    }
+
+    func testRestoreDefaultDegradesToDefaultProfile() {
+        let cursor = RecordingCursor()
+        let executor = ActionExecutor(poster: RecordingPoster(), cursor: cursor)
+        executor.perform(.device(.defaultDPI))
+        XCTAssertEqual(cursor.activatedDefaultCalls, 1)
+    }
+
+    func testDPISuccessfulApplyDoesNotTouchCursor() {
+        let cursor = RecordingCursor()
+        let dpi = StubDPI(applies: true)
+        let executor = ActionExecutor(poster: RecordingPoster(), cursor: cursor, dpi: dpi)
+        executor.perform(.device(.dpiCycle))
+        XCTAssertEqual(cursor.activatedNextCalls, 0)
+    }
+
+    func testDPIShiftHoldLifecycleCallsBeginAndEnd() {
+        let dpi = StubDPI()
+        let executor = ActionExecutor(poster: RecordingPoster(), dpi: dpi)
+        executor.beganHold(.device(.dpiShift))
+        executor.endedHold(.device(.dpiShift))
+        XCTAssertEqual(dpi.beginCalls, 1)
+        XCTAssertEqual(dpi.endCalls, 1)
+    }
+}
+
+/// Recording CursorCoordinating fake for the DPI-degradation tests. The suite
+/// previously had no fake for this protocol (EventRouterTests' StubCursor
+/// conforms to the separate CursorControlling transform API), so this is the
+/// first; counters cover the cycle/default arms the degradation engages.
+final class RecordingCursor: CursorCoordinating {
+    private(set) var activatedNextCalls = 0
+    private(set) var activatedDefaultCalls = 0
+    private(set) var beganPrecisionCalls = 0
+    private(set) var endedPrecisionCalls = 0
+
+    func activateNext(source: ProfileSwitchSource) { activatedNextCalls += 1 }
+    func activateDefault() { activatedDefaultCalls += 1 }
+    func beginPrecision() { beganPrecisionCalls += 1 }
+    func endPrecision() { endedPrecisionCalls += 1 }
+}
+
+/// Tiny DPICoordinating fake: `applies` is the Bool that apply() returns
+/// (false drives the spec §3 degradation); beginShift/endShift are counted for
+/// the Shift hold-lifecycle test.
+final class StubDPI: DPICoordinating {
+    private let applies: Bool
+    private(set) var beginCalls = 0
+    private(set) var endCalls = 0
+
+    init(applies: Bool = true) { self.applies = applies }
+
+    func apply(_ operation: DPIOperation) -> Bool { applies }
+    func beginShift() -> Bool {
+        beginCalls += 1
+        return applies
+    }
+    func endShift() { endCalls += 1 }
 }
 
 /// Thread-safe: MacroEngine tests spawn real Tasks that append concurrently

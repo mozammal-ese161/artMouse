@@ -38,6 +38,15 @@ final class EngineBootstrap {
     /// `macroEngine` — the pump routes into the router created in start(), so
     /// a class-level `let` cannot hold it.
     private var hidPump: HIDEventPump?
+    /// DPI feature reports (Phase 4): strong anchors, same idiom as
+    /// `macroEngine`. The manager resolves the active profile for the
+    /// executor's DPI arms, and the executor holds it weakly (cycle hygiene),
+    /// so the bootstrap owns its lifetime. The sender is anchored because the
+    /// applyLevel closure captures it weakly — without an owner it would
+    /// deallocate when start() returns and every send would silently fail
+    /// (permanent degradation).
+    private var featureSender: IOKitFeatureReportSender?
+    private var dpiManager: DPIManager?
     /// Shared with the Settings UI (created by AppDelegate): the pump logs
     /// every observation and the Device Analyzer sheet reads the same store.
     private let hidLog: HIDEventLog?
@@ -90,8 +99,43 @@ final class EngineBootstrap {
         // warp-and-click events it posts must carry the private-source tag.
         let snappingController = SnappingController(finder: AXDefaultButtonFinder(), poster: poster)
         self.snappingController = snappingController
+        // DPI feature reports (Phase 4): the manager resolves the first
+        // enabled profile that declares DPI; the glue sender matches by
+        // VID/PID. Send failures degrade in the executor (spec §3). Runs on
+        // the tap-callback path, which stays on the main run loop (calling
+        // discipline below).
+        let featureSender = IOKitFeatureReportSender()
+        self.featureSender = featureSender
+        let dpiManager = DPIManager(
+            profileProvider: { [weak store] in
+                guard let settings = store?.settings else { return nil }
+                return settings.deviceProfiles.first { profile in
+                    profile.dpi != nil
+                        && !settings.isDeviceDisabled(vendorID: profile.vendorID,
+                                                      productID: profile.productID)
+                }
+            },
+            applyLevel: { [weak store, weak featureSender] profile, level, index in
+                guard let featureSender,
+                      let config = profile.dpi,
+                      featureSender.send(vendorID: profile.vendorID,
+                                         productID: profile.productID,
+                                         reportID: config.reportID,
+                                         report: DPIReportBuilder.payload(config: config, level: level))
+                else { return false }
+                if let store {
+                    var settings = store.settings
+                    if let i = settings.deviceProfiles.firstIndex(where: { $0.id == profile.id }) {
+                        settings.deviceProfiles[i].dpi?.activeLevelIndex = index
+                        store.settings = settings
+                        try? store.save()
+                    }
+                }
+                return true
+            })
+        self.dpiManager = dpiManager
         let executor = ActionExecutor(poster: poster, cursor: cursorController, wheel: scrollController,
-                                      snapping: snappingController)
+                                      snapping: snappingController, dpi: dpiManager)
         let clickLock = ClickLockCoordinator(executor: executor)
         let router = EventRouter(settings: store, executor: executor,
                                  clickLock: clickLock, cursor: cursorController,

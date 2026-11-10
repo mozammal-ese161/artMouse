@@ -29,6 +29,10 @@ public final class ActionExecutor: ActionExecuting {
     /// Weak for the same cycle reason: the snapping controller is engine-owned
     /// state assembled alongside the executor (Task 4).
     private weak var snapping: SnappingPerforming?
+    /// Weak for the same cycle reason: the DPI manager is engine-owned state
+    /// anchored by the bootstrap alongside the executor (Task 7); its Bool is
+    /// "report actually sent" and false degrades to cursor switching (spec §3).
+    private weak var dpi: DPICoordinating?
     /// Scroll events posted by the `.scroll` arm, recorded for tests — asserting
     /// poster ownership against a live CGEventPoster would inject real HID input.
     /// No public API added.
@@ -39,12 +43,14 @@ public final class ActionExecutor: ActionExecuting {
                 cursor: CursorCoordinating? = nil,
                 wheel: WheelModeSwitching? = nil,
                 snapping: SnappingPerforming? = nil,
+                dpi: DPICoordinating? = nil,
                 cursorLocation: @escaping () -> CGPoint = { CGEvent(source: nil)?.location ?? .zero }) {
         self.poster = poster
         self.workspace = workspace
         self.cursor = cursor
         self.wheel = wheel
         self.snapping = snapping
+        self.dpi = dpi
         self.cursorLocation = cursorLocation
     }
 
@@ -67,10 +73,12 @@ public final class ActionExecutor: ActionExecuting {
 
     public func beganHold(_ action: Action) {
         if case .device(.switchPrecisionMode) = action { cursor?.beginPrecision() }
+        if case .device(.dpiShift) = action { _ = dpi?.beginShift() }
     }
 
     public func endedHold(_ action: Action) {
         if case .device(.switchPrecisionMode) = action { cursor?.endPrecision() }
+        if case .device(.dpiShift) = action { dpi?.endShift() }
     }
 
     /// Used by ClickLockCoordinator to post lock-phase button events.
@@ -152,8 +160,26 @@ public final class ActionExecutor: ActionExecuting {
             break   // hold lifecycle, not a tap action
         case .switchWheelMode:
             wheel?.activateNextWheelMode()   // live (Task 8); Device editor re-enables in Task 10
-        case .dpiCycle, .dpiUp, .dpiDown, .dpiShift, .defaultDPI:
-            break   // DPI ops deferred (phase 4); UI disables
+        case .dpiCycle: performDPI(.cycle)
+        case .dpiUp: performDPI(.up)
+        case .dpiDown: performDPI(.down)
+        case .defaultDPI: performDPI(.restoreDefault)
+        case .dpiShift: break   // hold lifecycle: beganHold/endedHold arms above
+        }
+    }
+
+    /// DPI ops on a device without DPI support degrade to cursor-speed
+    /// profile switching (spec §3): cycle/up/down → next profile,
+    /// default → the "Default" profile. A successful apply must not touch
+    /// the cursor.
+    private func performDPI(_ operation: DPIOperation) {
+        guard let dpi, dpi.apply(operation) else {
+            if case .restoreDefault = operation {
+                cursor?.activateDefault()
+            } else {
+                cursor?.activateNext(source: .buttonAction)
+            }
+            return
         }
     }
 

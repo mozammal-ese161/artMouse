@@ -11,11 +11,11 @@ struct DeviceActionEditorView: View {
             set: { onChange(.device($0)) })) {
             Text("Activate Next Cursor Speed").tag(DeviceOp.activateCursorSpeed(nil))
             Text("Switch Precision Mode").tag(DeviceOp.switchPrecisionMode)
-            Text("DPI Cycle").tag(DeviceOp.dpiCycle).disabled(true)        // phase 4
-            Text("DPI Up").tag(DeviceOp.dpiUp).disabled(true)              // phase 4
-            Text("DPI Down").tag(DeviceOp.dpiDown).disabled(true)          // phase 4
-            Text("DPI Shift").tag(DeviceOp.dpiShift).disabled(true)        // phase 4
-            Text("Default DPI").tag(DeviceOp.defaultDPI).disabled(true)    // phase 4
+            Text("DPI Cycle").tag(DeviceOp.dpiCycle)
+            Text("DPI Up").tag(DeviceOp.dpiUp)
+            Text("DPI Down").tag(DeviceOp.dpiDown)
+            Text("DPI Shift").tag(DeviceOp.dpiShift)
+            Text("Default DPI").tag(DeviceOp.defaultDPI)
             Text("Switch Wheel Mode").tag(DeviceOp.switchWheelMode)
         }
         .labelsHidden()
