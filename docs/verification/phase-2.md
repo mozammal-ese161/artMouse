@@ -34,8 +34,8 @@ HOW TO VERIFY line.
   HOW TO VERIFY: set the wheel profile mode to Acceleration with Sens 2.0 and roll the wheel one notch in a long document — the scroll distance must be about twice the stock notch; lower Sens to 0.5 and confirm it visibly shortens.
 - [ ] Constant mode: fixed distance per notch regardless of roll speed.
   HOW TO VERIFY: set mode to Constant, roll the wheel slowly once and then flick rapidly several times — every notch must advance the same fixed distance, with no speed-dependent jumps.
-- [ ] Smooth scroll: a notch spreads into multiple small steps (watch a long page glide).
-  HOW TO VERIFY: enable Smooth Scroll on the active profile, roll one notch over a long web page — the page must glide in several small steps instead of jumping, and stop cleanly when you roll again.
+- [ ] Smooth scroll: a notch spreads into multiple small steps (watch a long page glide); per-notch distance should match Constant mode at the same Lines setting (3 lines/notch at defaults).
+  HOW TO VERIFY: enable Smooth Scroll on the active profile, roll one notch over a long web page — the page must glide in several small steps instead of jumping, and stop cleanly when you roll again. Then set mode to Constant, roll one notch, and confirm the smooth glide covers about the same total distance as the constant notch (both 3 lines at defaults; if one visibly overshoots the other, the smooth total is wrong).
 - [ ] Auto mode: flick and watch it continue, then stop after the configured notches of silence.
   HOW TO VERIFY: set mode to Auto with the default Auto Interval/Stop Ticks, flick the wheel once — scrolling must continue after you stop rolling and then halt by itself after roughly the configured ticks of silence; a reverse flick must stop or reverse it.
 - [ ] Wheel→keys: bind a key code; rolling the wheel types the key; stop rolling releases.

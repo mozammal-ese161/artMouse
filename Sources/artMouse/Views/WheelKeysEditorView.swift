@@ -24,6 +24,9 @@ struct WheelKeysEditorView: View {
                 set: { onChange(WheelKeyEmulation(keyCode: emulation.keyCode, mods: emulation.mods,
                                                   repeatWhileRolling: $0)) }))
                 .toggleStyle(.checkbox)
+            Text("Each notch presses and releases the key.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 }

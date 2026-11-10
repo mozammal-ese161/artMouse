@@ -16,6 +16,11 @@ public enum CGEventTranslation {
             return .dragged(dx: event.getDoubleValueField(.mouseEventDeltaX),
                             dy: event.getDoubleValueField(.mouseEventDeltaY))
         case .scrollWheel:
+            // Trackpad two-finger swipes arrive as scroll-wheel events marked
+            // continuous. They bypass the wheel pipeline (.other routes to
+            // passThrough, never matching a wheel binding) so an active wheel
+            // profile cannot scale or intercept the trackpad.
+            if event.getIntegerValueField(.scrollWheelEventIsContinuous) == 1 { return .other }
             // Vertical scroll events carry a nonzero Axis1 delta; horizontal
             // events a nonzero Axis2 delta.
             let axis: ScrollAxis = event.getDoubleValueField(.scrollWheelEventDeltaAxis1) != 0 ? .vertical : .horizontal

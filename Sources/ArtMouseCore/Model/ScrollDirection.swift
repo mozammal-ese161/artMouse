@@ -15,6 +15,18 @@ public enum ScrollDirection: String, Codable, CaseIterable, Equatable {
         case .down, .left: return -1
         }
     }
+
+    /// The same axis, the opposite way. Reverse-scroll settings flip the
+    /// derived direction up front so every wheel mode (acceleration, constant,
+    /// auto, smooth, keys) sees the reversed wheel, not just the scaled one.
+    public var flipped: ScrollDirection {
+        switch self {
+        case .up: return .down
+        case .down: return .up
+        case .left: return .right
+        case .right: return .left
+        }
+    }
 }
 
 extension ScrollDirection {

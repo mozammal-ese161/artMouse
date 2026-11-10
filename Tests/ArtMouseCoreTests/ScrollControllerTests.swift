@@ -45,6 +45,36 @@ final class ScrollControllerTests: XCTestCase {
                        .scale(vertical: 1.0, horizontal: -1.0))
     }
 
+    // Reverse must reach every intercept mode, not only acceleration: constant
+    // emits with the flipped direction (negative Axis1 for an up tick).
+    func testReverseAppliesInConstantMode() {
+        let store = makeStore(profiles: [WheelModeProfile(name: "Default", mode: .constant, reverseVertical: true)])
+        let emitter = ScrollEmitter(poster: poster)
+        let controller = ScrollController(store: store, emitter: emitter)
+        XCTAssertEqual(controller.disposition(forScroll: .vertical, ticks: 1), .intercept)
+        XCTAssertEqual(poster.events.count, 1)
+        XCTAssertLessThan(poster.events[0].getDoubleValueField(.scrollWheelEventDeltaAxis1), 0)
+    }
+
+    // Smooth mode too: the flipped direction drives the emissions, so the
+    // first integral emission carries a negative Axis1. One notch (ticks 1)
+    // totals lines 3 × sens 1 × 1 × magnitude 1 = 3 lines, chunk 3/5 = 0.6 —
+    // the first due tick only fills the carry (0.6 < 1, nothing emitted), the
+    // second crosses 1.2 and posts the first line.
+    func testReverseAppliesInSmoothMode() {
+        var now = 0.0
+        let store = makeStore(profiles: [WheelModeProfile(name: "Default", reverseVertical: true,
+                                                          smoothScroll: true)])
+        let emitter = ScrollEmitter(poster: poster)
+        let controller = ScrollController(store: store, emitter: emitter, clock: { now })
+        XCTAssertEqual(controller.disposition(forScroll: .vertical, ticks: 1), .intercept)
+        XCTAssertEqual(poster.events.count, 0, "first chunk 0.6 stays below one line")
+        now += 0.016
+        controller.pumpEmitter()
+        XCTAssertEqual(poster.events.count, 1)
+        XCTAssertLessThan(poster.events[0].getDoubleValueField(.scrollWheelEventDeltaAxis1), 0)
+    }
+
     func testConstantModeEmitsOnceAndIntercepts() {
         let store = makeStore(profiles: [WheelModeProfile(name: "Default", mode: .constant, lines: 7)])
         let emitter = ScrollEmitter(poster: poster)

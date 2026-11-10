@@ -27,21 +27,28 @@ final class ScrollEmitterTests: XCTestCase {
         XCTAssertEqual(poster.events[0].getDoubleValueField(.scrollWheelEventDeltaAxis1), 0, accuracy: 1e-9)
     }
 
-    // SDK ruling: chunk lines must be integral on this SDK — the scroll delta
-    // fields are int-backed (setDoubleValueField truncates and
-    // getDoubleValueField reads the int back; the 16.16 fixed-point field
-    // quantizes at 1/65536), so the plan's fractional 6/5 = 1.2 chunk is not
-    // representable in a real CGEvent here. lines 5 / emissions 5 keeps every
-    // behavioral assertion (counts, cadence, idle) while staying representable.
+    // Carry scheme: smooth emits INTEGRAL line counts with a fractional
+    // carry, so integer-line consumers always see a nonzero delta. lines 6
+    // over emissions 5 (80/16) gives chunk 1.2 — the carry accumulates
+    // 1, 1, 1, 1, 2 for a 6-line total.
     func testSmoothSpreadsLinesAcrossEmissions() {
         let emitter = makeEmitter()
-        emitter.beginSmooth(direction: .up, lines: 5, intervalMS: 16, now: now)   // emissions = 80/16 = 5 → 1.0 each
+        emitter.beginSmooth(direction: .up, lines: 6, intervalMS: 16, now: now)   // emissions = 80/16 = 5 → 1.2 each
         emitter.tick(now: now)                                                     // first chunk immediately
         XCTAssertEqual(poster.events.count, 1)
-        XCTAssertEqual(poster.events[0].getDoubleValueField(.scrollWheelEventDeltaAxis1), 5.0 / 5.0, accuracy: 1e-9)
-        for _ in 0..<4 { now += 0.016; emitter.tick(now: now) }
-        XCTAssertEqual(poster.events.count, 5)
-        XCTAssertFalse(emitter.isActive)                                           // all chunks emitted → idle
+        XCTAssertEqual(poster.events[0].getDoubleValueField(.scrollWheelEventDeltaAxis1), 1, accuracy: 1e-9)
+        var axis1: [Double] = [1]
+        for _ in 0..<4 {
+            now += 0.016
+            emitter.tick(now: now)
+            axis1.append(poster.events.last!.getDoubleValueField(.scrollWheelEventDeltaAxis1))
+        }
+        let expected: [Double] = [1, 1, 1, 1, 2]
+        for (index, value) in axis1.enumerated() {
+            XCTAssertEqual(value, expected[index], accuracy: 1e-9, "emission \(index)")   // carry-accumulated
+        }
+        XCTAssertEqual(axis1.reduce(0, +), 6, accuracy: 1e-9)                      // total distance preserved
+        XCTAssertFalse(emitter.isActive)                                           // drained → idle
     }
 
     func testAutoEmitsThenStopsWithoutInput() {

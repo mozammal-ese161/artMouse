@@ -43,4 +43,13 @@ final class CGEventTranslationTests: XCTestCase {
             CGEventTranslation.inputEvent(from: .scrollWheel, scroll),
             .scrolled(axis: .vertical, ticks: 1))
     }
+
+    // Trackpad two-finger swipes arrive as continuous scroll-wheel events;
+    // they bypass the wheel pipeline (.other) so an active wheel profile
+    // never scales or intercepts them.
+    func testContinuousScrollBypassesWheelPipeline() {
+        let scroll = CGEvent(scrollWheelEvent2Source: nil, units: .line, wheelCount: 1, wheel1: 1, wheel2: 0, wheel3: 0)!
+        scroll.setIntegerValueField(.scrollWheelEventIsContinuous, value: 1)
+        XCTAssertEqual(CGEventTranslation.inputEvent(from: .scrollWheel, scroll), .other)
+    }
 }

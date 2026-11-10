@@ -288,10 +288,11 @@ final class RouterChordTests: XCTestCase {
     }
 
     // Up-path mirror: chord ups pass through the same intercept as downs.
-    // Releasing the initiator flushes all held buttons — none of their
-    // deferred bindings ever began, so nothing ends — and the cleared capture
-    // lets the next press resolve its own binding normally.
-    func testChordUpFlushRunsNormalUpsAndClearsCapture() {
+    // Releasing the initiator flushes all held buttons: each flushed button
+    // runs its deferred binding down-then-up — a hold begins and ends
+    // instantly — and the cleared capture lets the next press resolve its own
+    // binding normally.
+    func testChordUpFlushRunsDeferredDownThenUpAndClearsCapture() {
         let executor = RecordingExecutor()
         var settings = GlobalSettings.default
         settings.buttonBindings = [
@@ -306,10 +307,46 @@ final class RouterChordTests: XCTestCase {
         XCTAssertEqual(router.handle(.buttonDown(.middle)), .consume)
         XCTAssertTrue(executor.holdsBegan.isEmpty)   // capture defers the hold
         XCTAssertEqual(router.handle(.buttonUp(.middle)), .consume)   // initiator release → flush
-        XCTAssertTrue(executor.holdsBegan.isEmpty)
-        XCTAssertTrue(executor.holdsEnded.isEmpty)   // hold never began, so it never ends
-        XCTAssertTrue(executor.performed.isEmpty)    // up path never fires taps
+        XCTAssertEqual(executor.holdsBegan, [.device(.switchPrecisionMode)])
+        XCTAssertEqual(executor.holdsEnded, [.device(.switchPrecisionMode)])   // flushed hold runs began+ended
+        XCTAssertTrue(executor.performed.isEmpty)    // the hold binding has no tap action
         XCTAssertEqual(router.handle(.buttonDown(.fourth)), .consume)   // capture cleared
         XCTAssertEqual(executor.performed, [.music(.playPause, fineTune: false)])
+    }
+
+    // A chord initiator released alone (solo release) must not swallow its own
+    // binding: the flush performs the deferred down — which fires the tap —
+    // before the up.
+    func testChordSoloReleaseFiresDeferredTapBinding() {
+        let executor = RecordingExecutor()
+        var settings = GlobalSettings.default
+        settings.buttonBindings = [ButtonBinding(button: .middle, actions: [.music(.playPause, fineTune: false)])]
+        settings.chords = [Chord(buttons: [.middle, .fourth], actions: [.click(.left, [])], timeout: 10.0)]
+        let settingsStore = makeStore(settings)
+        let engine = ChordEngine(settings: settingsStore)
+        let router = EventRouter(settings: settingsStore, executor: executor,
+                                 clickLock: StubClickLock(), cursor: StubCursor(), chords: engine)
+        XCTAssertEqual(router.handle(.buttonDown(.middle)), .consume)
+        XCTAssertTrue(executor.performed.isEmpty, "capture defers the binding")
+        XCTAssertEqual(router.handle(.buttonUp(.middle)), .consume)
+        XCTAssertEqual(executor.performed, [.music(.playPause, fineTune: false)])
+    }
+
+    // Hold semantics on a solo release: the deferred hold is flushed at
+    // release time and runs its full lifecycle instantly (began then ended).
+    func testChordSoloReleaseRunsHoldLifecycle() {
+        let executor = RecordingExecutor()
+        var settings = GlobalSettings.default
+        settings.buttonBindings = [ButtonBinding(button: .middle, actions: [.device(.switchPrecisionMode)])]
+        settings.chords = [Chord(buttons: [.middle, .fourth], actions: [.click(.left, [])], timeout: 10.0)]
+        let settingsStore = makeStore(settings)
+        let engine = ChordEngine(settings: settingsStore)
+        let router = EventRouter(settings: settingsStore, executor: executor,
+                                 clickLock: StubClickLock(), cursor: StubCursor(), chords: engine)
+        XCTAssertEqual(router.handle(.buttonDown(.middle)), .consume)
+        XCTAssertTrue(executor.holdsBegan.isEmpty)
+        XCTAssertEqual(router.handle(.buttonUp(.middle)), .consume)
+        XCTAssertEqual(executor.holdsBegan, [.device(.switchPrecisionMode)])
+        XCTAssertEqual(executor.holdsEnded, [.device(.switchPrecisionMode)])
     }
 }

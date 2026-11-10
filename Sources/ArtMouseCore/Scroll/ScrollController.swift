@@ -45,7 +45,15 @@ public final class ScrollController: ScrollControlling, WheelModeSwitching {
         let autoInterval = Int(Double(profile.autoIntervalMS).clamped(8...1000))
         let stopTicks = Int(Double(profile.autoStopTicks).clamped(1...100))
 
-        let direction = Self.direction(axis: axis, ticks: ticks)
+        var direction = Self.direction(axis: axis, ticks: ticks)
+        // Reverse applies to EVERY mode: flipping the derived direction up
+        // front means keys/smooth/constant/auto intercepts and the
+        // acceleration scale all travel the reversed way (fix round: reverse
+        // used to be consulted only in scaleOutcome).
+        if (axis == .vertical && profile.reverseVertical)
+            || (axis == .horizontal && profile.reverseHorizontal) {
+            direction = direction.flipped
+        }
 
         // 1. Wheel→keys takes absolute precedence.
         if let keys = profile.keyEmulation {
@@ -56,8 +64,11 @@ public final class ScrollController: ScrollControlling, WheelModeSwitching {
         // 2. Smooth scroll overlay.
         if profile.smoothScroll {
             if autoDirection != nil { emitter.stop(); autoDirection = nil }   // fix round 1: end a live auto
+            // Notch distance matches Constant mode: lines per notch × sens ×
+            // accel factor × rolled ticks (fix round: the total used to ignore
+            // lines, so Smooth moved 1 line where Constant moved 3).
             let magnitude = Double(abs(ticks))
-            let total = magnitude * sens * (1 + accel * (magnitude / Self.accelerationReferenceTicks))
+            let total = lines * sens * (1 + accel * (magnitude / Self.accelerationReferenceTicks)) * magnitude
             emitter.beginSmooth(direction: direction, lines: total,
                                 intervalMS: Int(Double(profile.smoothIntervalMS).clamped(8...1000)),
                                 now: clock())
@@ -67,9 +78,8 @@ public final class ScrollController: ScrollControlling, WheelModeSwitching {
         switch profile.mode {
         case .acceleration:
             if autoDirection != nil { emitter.stop(); autoDirection = nil }   // fix round 2: end a live auto
-            return Self.scaleOutcome(axis: axis, ticks: ticks, sens: sens, accel: accel,
-                                     reverseVertical: profile.reverseVertical,
-                                     reverseHorizontal: profile.reverseHorizontal)
+            return Self.scaleOutcome(axis: direction, magnitude: Double(abs(ticks)),
+                                     sens: sens, accel: accel)
         case .constant:
             if autoDirection != nil { emitter.stop(); autoDirection = nil }   // fix round 1: end a live auto
             emitter.emitOnce(direction: direction, lines: lines)
@@ -93,21 +103,18 @@ public final class ScrollController: ScrollControlling, WheelModeSwitching {
         ScrollDirection.derived(axis: axis, ticks: ticks)
     }
 
-    static func scaleOutcome(axis: ScrollAxis, ticks: Double, sens: Double, accel: Double,
-                             reverseVertical: Bool, reverseHorizontal: Bool) -> ScrollDisposition {
-        let magnitude = Double(abs(ticks))
+    /// Sign and magnitude of the acceleration scale for one tick. `axis` is
+    /// the (already reverse-flipped) direction, so the sign comes from the
+    /// direction itself and the non-ticked axis stays at 1.0.
+    static func scaleOutcome(axis: ScrollDirection, magnitude: Double, sens: Double,
+                             accel: Double) -> ScrollDisposition {
         let accelFactor = 1 + accel * (magnitude / accelerationReferenceTicks)
-        var factor = sens * accelFactor
-        if ticks < 0 { factor = -factor }
+        let factor = sens * accelFactor * axis.sign
         var vertical = 1.0
         var horizontal = 1.0
-        switch axis {
-        case .vertical:
-            if reverseVertical { factor = -factor }
-            vertical = factor
-        case .horizontal:
-            if reverseHorizontal { factor = -factor }
-            horizontal = factor
+        switch axis.axis {
+        case .vertical: vertical = factor
+        case .horizontal: horizontal = factor
         }
         return .scale(vertical: vertical, horizontal: horizontal)
     }

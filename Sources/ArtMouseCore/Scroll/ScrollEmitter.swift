@@ -7,8 +7,8 @@ import Foundation
 public final class ScrollEmitter {
     private enum Mode {
         case idle
-        case smooth(direction: ScrollDirection, pendingLines: Double, chunkLines: Double,
-                    interval: Double, nextDue: Double)
+        case smooth(direction: ScrollDirection, remainingLines: Double, chunkLines: Double,
+                    interval: Double, nextDue: Double, carry: Double)
         case auto(direction: ScrollDirection, lines: Double, interval: Double, due: Double,
                   emissionsSinceInput: Int, stopAfterTicks: Int)
         case keys(keys: WheelKeyEmulation, lastInput: Double, nextRepeat: Double)
@@ -38,8 +38,9 @@ public final class ScrollEmitter {
         releaseKeysIfHeld()
         let interval = Double(intervalMS) / 1000.0
         let emissions = max(1, Int(80.0 / Double(intervalMS)))
-        mode = .smooth(direction: direction, pendingLines: lines,
-                       chunkLines: lines / Double(emissions), interval: interval, nextDue: now)
+        mode = .smooth(direction: direction, remainingLines: lines,
+                       chunkLines: lines / Double(emissions), interval: interval, nextDue: now,
+                       carry: 0)
         tick(now: now)   // first chunk immediately
     }
 
@@ -83,17 +84,32 @@ public final class ScrollEmitter {
         switch mode {
         case .idle:
             break
-        case .smooth(let direction, var pending, let chunk, let interval, var nextDue):
-            while nextDue <= now && pending > 0 {
-                let emitted = min(chunk, pending)
-                postScroll(direction: direction, lines: emitted)
-                pending -= emitted
+        case .smooth(let direction, var remaining, let chunk, let interval, var nextDue, var carry):
+            // Integral emission with a fractional carry: chunks (e.g. 3 lines
+            // / 5 = 0.6) accumulate until they cross a whole line, because the
+            // line delta fields truncate and an integer-line consumer would
+            // otherwise see 0 on every tick.
+            while nextDue <= now && remaining > 0 {
+                carry += min(chunk, remaining)
+                // The 1e-9 epsilon absorbs the drift of accumulating a
+                // non-binary chunk (0.2 + 1.2 × 4 lands at 1.9999999999999998
+                // and would otherwise floor to 1, dropping the final line).
+                let emit = floor(carry + 1e-9)
+                carry -= emit
+                if carry < 0 { carry = 0 }
+                if emit >= 1 { postScroll(direction: direction, lines: emit) }
+                remaining -= min(chunk, remaining)
                 nextDue += interval
             }
-            mode = pending > 0
-                ? .smooth(direction: direction, pendingLines: pending, chunkLines: chunk,
-                          interval: interval, nextDue: nextDue)
-                : .idle
+            // Drain to idle only when the distance is spent AND no sub-line
+            // remainder is pending; a final sub-line chunk (< 1 line) is
+            // dropped — it cannot be expressed as a whole line delta.
+            if remaining <= 0 && carry < 1 {
+                mode = .idle
+            } else {
+                mode = .smooth(direction: direction, remainingLines: remaining, chunkLines: chunk,
+                               interval: interval, nextDue: nextDue, carry: carry)
+            }
         case .auto(let direction, let lines, let interval, let due, var emissions, let stopAfter):
             if emissions >= stopAfter { mode = .idle; return }
             // Fix round 1: auto cadence is gated by `due` (armed at beginAuto,
@@ -134,10 +150,11 @@ public final class ScrollEmitter {
         // SDK adaptation: this SDK's wheel init is (scrollWheelEvent2Source:
         // units:wheelCount:wheel1:wheel2:wheel3:) with Int32 wheel parameters
         // — the plan's variadic CGFloat wheel:h:0:or:[] overload does not
-        // exist here. The int delta fields truncate, so fractional smooth
-        // chunks (e.g. lines 3.0 in 5 chunks → 0.6) would scroll as 0 lines;
-        // the true value is therefore also carried on the 16.16 fixed-point
-        // delta fields, the same shape the system uses for sub-line scrolling.
+        // exist here. The int delta fields truncate, so smooth scrolling
+        // emits whole lines (carry scheme in tick(now:)) and any fractional
+        // lines setting (e.g. Constant at 3.5 lines) still carries its true
+        // value on the 16.16 fixed-point delta fields, the same shape the
+        // system uses for sub-line scrolling.
         // wheelCount must be 2 or the constructor ignores wheel2 (horizontal).
         let event = CGEvent(scrollWheelEvent2Source: nil, units: .line, wheelCount: 2,
                             wheel1: Int32(v), wheel2: Int32(h), wheel3: 0)!

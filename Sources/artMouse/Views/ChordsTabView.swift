@@ -16,7 +16,7 @@ struct ChordsTabView: View {
                                 onUpdate: { model.updateChord($0) },
                                 onDelete: { model.removeChord($0.id) })
             }
-            Text("Press the first button, then the rest within the timeout. While a chord is possible, the first button's own binding is deferred; releasing it alone fires its normal binding.")
+            Text("Press the first button, then the rest within the timeout. While a chord is possible, the first button's own binding is deferred; releasing it alone fires its normal binding. A chord held past its timeout flushes at your next input — the initiator's own binding fires then.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

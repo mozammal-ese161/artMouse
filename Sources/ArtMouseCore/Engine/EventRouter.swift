@@ -149,7 +149,15 @@ public final class EventRouter: EventRouting {
             for action in actions { executor.perform(action) }
             return .consume
         case .flush(let flushed):
-            for flushedButton in flushed { performNormalUp(flushedButton) }
+            // Each flushed button delivers the binding its captured down
+            // deferred: down-then-up per button. A deferred tap fires here
+            // (the up path alone never performs taps); a deferred hold runs
+            // beganHold and endedHold back to back (pinned by
+            // testChordSoloReleaseRunsHoldLifecycle).
+            for flushedButton in flushed {
+                performNormalDown(flushedButton)
+                performNormalUp(flushedButton)
+            }
             switch chords.intercept(.buttonUp(button), now: Date().timeIntervalSince1970) {
             case .route:
                 performNormalUp(button)
