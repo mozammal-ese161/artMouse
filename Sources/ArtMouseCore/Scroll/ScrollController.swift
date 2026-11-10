@@ -66,6 +66,7 @@ public final class ScrollController: ScrollControlling {
         // 3. Modes.
         switch profile.mode {
         case .acceleration:
+            if autoDirection != nil { emitter.stop(); autoDirection = nil }   // fix round 2: end a live auto
             return Self.scaleOutcome(axis: axis, ticks: ticks, sens: sens, accel: accel,
                                      reverseVertical: profile.reverseVertical,
                                      reverseHorizontal: profile.reverseHorizontal)

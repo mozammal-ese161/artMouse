@@ -121,6 +121,21 @@ final class ScrollControllerTests: XCTestCase {
         XCTAssertFalse(emitter.isActive)                       // wheel-mode rotation stops the auto
     }
 
+    // Fix round 2 (review residual): the .acceleration arm was the one branch
+    // still stranding a live auto on profile switch.
+    func testSwitchToAccelerationStopsRunningAuto() {
+        let store = makeStore(profiles: [WheelModeProfile(name: "Default", mode: .auto)])
+        let emitter = ScrollEmitter(poster: poster)
+        let controller = ScrollController(store: store, emitter: emitter)
+        XCTAssertEqual(controller.disposition(forScroll: .vertical, ticks: 1), .intercept)
+        XCTAssertTrue(emitter.isActive)                        // auto running under the auto profile
+        store.settings.wheelModeProfiles = [WheelModeProfile(name: "Default")]
+        store.settings.activeWheelModeProfileID = nil
+        XCTAssertEqual(controller.disposition(forScroll: .vertical, ticks: 2),
+                       .scale(vertical: 1.0, horizontal: 1.0))
+        XCTAssertFalse(emitter.isActive)                       // auto stopped; scaled ticks carry the motion
+    }
+
     // Native momentum events can carry zero deltas — nothing to resolve.
     func testZeroTickPassesThrough() {
         let store = makeStore(profiles: [WheelModeProfile(name: "Default")])
