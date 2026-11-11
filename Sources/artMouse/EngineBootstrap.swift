@@ -230,6 +230,17 @@ final class EngineBootstrap {
             // discipline above), so the mirrored write is main-actor isolated.
             MainActor.assumeIsolated {
                 self?.safetyRestoreWarning = cursorController?.safetyRestoreWarning
+                // Tap self-heal: the tap is created once in start(); when that
+                // failed (permission not yet granted) it stayed nil forever, so
+                // a user granting Input Monitoring mid-run left the engine dead
+                // until relaunch. Retry while the tap is absent: start() is a
+                // no-op once the tap exists, and reportTapCreation keeps the
+                // banner in sync with each retry's real result.
+                if let tapEngine = self?.engine, !tapEngine.hasTap {
+                    let started = tapEngine.start()
+                    self?.permissions.reportTapCreation(started)
+                    self?.permissions.refresh()
+                }
             }
         }
         RunLoop.main.add(tick, forMode: .common)

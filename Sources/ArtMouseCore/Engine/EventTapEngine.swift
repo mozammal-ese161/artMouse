@@ -27,6 +27,12 @@ public final class EventTapEngine {
     /// Combine view of `tapActive` for observers (task-15 interface).
     public var tapActivePublisher: Published<Bool>.Publisher { $tapActive }
 
+    /// True while no tap exists — i.e. creation failed (permission not yet
+    /// granted) and a retry can succeed. Distinct from `tapActive`: a tap
+    /// that exists but is disabled re-enables itself; an absent tap needs a
+    /// fresh `start()`.
+    public var hasTap: Bool { tap != nil }
+
     /// Standard mouse event mask; raw-HID buttons beyond these arrive in
     /// phase 4 via HIDObserver.
     public static let eventMask: CGEventMask =

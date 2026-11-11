@@ -9,6 +9,33 @@ final class EventTapEngineTests: XCTestCase {
         XCTAssertFalse(engine.start())
     }
 
+    func testFailedCreationLeavesTapAbsentForRetry() {
+        // Tap self-heal contract (permission granted mid-run): a failed
+        // creation leaves hasTap false — the bootstrap tick retries start()
+        // while that holds — and a later successful start() attaches the tap.
+        let tap = MockTap()
+        let engine = EventTapEngine(router: PassThroughRouter(),
+                                    tapFactory: RecoveryTapFactory(tap: tap))
+        XCTAssertFalse(engine.start())   // permission not yet granted
+        XCTAssertFalse(engine.hasTap)
+        XCTAssertFalse(engine.tapActive)
+        XCTAssertTrue(engine.start())    // permission appeared: the retry attaches
+        XCTAssertTrue(engine.hasTap)
+        XCTAssertTrue(engine.tapActive)
+    }
+
+    func testStartAfterAttachIsNoOp() {
+        // start() must never re-create an attached tap (the retry calls it
+        // every tick; re-creation would stack duplicate taps).
+        let tap = MockTap()
+        let factory = MockTapFactory(tap: tap)
+        let engine = EventTapEngine(router: PassThroughRouter(), tapFactory: factory)
+        XCTAssertTrue(engine.start())
+        XCTAssertTrue(engine.start())
+        XCTAssertTrue(engine.hasTap)
+        XCTAssertTrue(engine.tapActive)
+    }
+
     func testConsumedEventReturnsNilFromCallback() {
         let tap = MockTap()
         let factory = MockTapFactory(tap: tap)
@@ -163,6 +190,22 @@ final class MockTapFactory: EventTapCreating {
 }
 struct FailingTapFactory: EventTapCreating {
     func createTap(mask: CGEventMask, callback: @escaping (CGEvent, CGEventType) -> CGEvent?) -> EventTapHandle? { nil }
+}
+
+/// Fails the first creation (permission not yet granted), then attaches —
+/// models the retry-after-grant flow the bootstrap tick drives.
+final class RecoveryTapFactory: EventTapCreating {
+    let tap: MockTap
+    private var firstCall = true
+    init(tap: MockTap) { self.tap = tap }
+    func createTap(mask: CGEventMask, callback: @escaping (CGEvent, CGEventType) -> CGEvent?) -> EventTapHandle? {
+        if firstCall {
+            firstCall = false
+            return nil
+        }
+        tap.callback = callback
+        return tap
+    }
 }
 
 struct ScrollScalingRouter: EventRouting {

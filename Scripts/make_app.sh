@@ -6,9 +6,12 @@ cd "$(dirname "$0")/.."
 # Signing: a stable identity keeps macOS permission grants (Input Monitoring /
 # Accessibility) valid across rebuilds — ad-hoc signatures change identity on
 # every build, and TCC silently invalidates the grant at the next relaunch.
-# Override with ARTMOUSE_SIGNING_IDENTITY=... ; falls back to ad-hoc ("id -").
-IDENTITY="${ARTMOUSE_SIGNING_IDENTITY:-$(security find-identity -v -p codesigning 2>/dev/null | awk '/Apple Development/ {print $2; exit}')}"
-[ -n "${IDENTITY:-}" ] || IDENTITY="-"
+# Two same-named "Apple Development" certs exist in this keychain, so the
+# identity is pinned BY HASH: an unpicked name match could rotate between
+# certificates across builds and reset grants. Override with
+# ARTMOUSE_SIGNING_IDENTITY=... ; falls back to ad-hoc ("-").
+IDENTITY="${ARTMOUSE_SIGNING_IDENTITY:-DE91BF6849797A6C383CACF10849B004B140CF5E}"
+security find-identity -v -p codesigning 2>/dev/null | grep -q "$IDENTITY" || IDENTITY="-"
 APP="build/artMouse.app"
 
 swift build -c release
