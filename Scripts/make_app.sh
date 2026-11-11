@@ -3,7 +3,12 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-IDENTITY="${ARTMOUSE_SIGNING_IDENTITY:--}"   # default: ad-hoc signing
+# Signing: a stable identity keeps macOS permission grants (Input Monitoring /
+# Accessibility) valid across rebuilds — ad-hoc signatures change identity on
+# every build, and TCC silently invalidates the grant at the next relaunch.
+# Override with ARTMOUSE_SIGNING_IDENTITY=... ; falls back to ad-hoc ("id -").
+IDENTITY="${ARTMOUSE_SIGNING_IDENTITY:-$(security find-identity -v -p codesigning 2>/dev/null | awk '/Apple Development/ {print $2; exit}')}"
+[ -n "${IDENTITY:-}" ] || IDENTITY="-"
 APP="build/artMouse.app"
 
 swift build -c release
