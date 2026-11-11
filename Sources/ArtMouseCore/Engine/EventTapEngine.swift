@@ -99,6 +99,23 @@ public final class EventTapEngine {
         if tapActive != active { tapActive = active }
     }
 
+    /// Diagnostic (--debug-buttons): when the launch flag is present, every
+    /// button event reaching the tap is appended to
+    /// ~/Library/Application Support/artMouse/button-debug.log — hardware
+    /// truth for "my physical button does nothing" reports. Static so the
+    /// tap callback can reach it without touching the instance graph.
+    static let debugButtonLog: FileHandle? = {
+        guard CommandLine.arguments.contains("--debug-buttons") else { return nil }
+        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("artMouse", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appendingPathComponent("button-debug.log")
+        if !FileManager.default.fileExists(atPath: url.path) {
+            try? Data().write(to: url)
+        }
+        return try? FileHandle(forWritingTo: url)
+    }()
+
     func process(event: CGEvent, type: CGEventType) -> CGEvent? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             tap?.enable()
@@ -106,13 +123,30 @@ public final class EventTapEngine {
             return event
         }
         syncTapActive()
+        // --debug-buttons: record hardware button events BEFORE routing so a
+        // pressed-but-unrouted button is visible in the log.
+        if Self.debugButtonLog != nil,
+           type == .leftMouseDown || type == .leftMouseUp || type == .rightMouseDown
+           || type == .rightMouseUp || type == .otherMouseDown || type == .otherMouseUp {
+            let line = "\(Date()) type=\(type.rawValue) button=\(event.getIntegerValueField(.mouseEventButtonNumber))\n"
+            try? Self.debugButtonLog?.write(contentsOf: line.data(using: .utf8)!)
+        }
         // Loop protection: the app's own synthetic events (button remaps,
         // click-lock replay) must reach the system but never be routed again —
         // routing them would re-trigger the binding that posted them, looping
         // unbounded. Pass the event through unchanged (no consume, no transform).
         if isSelfPosted(event) { return event }
         let input = CGEventTranslation.inputEvent(from: type, event)
-        switch router.handle(input) {
+        let outcome = router.handle(input)
+        // --debug-buttons (continued): the routing outcome shows whether a
+        // binding matched (consume) or the button fell through (passThrough).
+        if Self.debugButtonLog != nil,
+           type == .leftMouseDown || type == .leftMouseUp || type == .rightMouseDown
+           || type == .rightMouseUp || type == .otherMouseDown || type == .otherMouseUp {
+            let line = "  -> outcome=\(outcome)\n"
+            try? Self.debugButtonLog?.write(contentsOf: line.data(using: .utf8)!)
+        }
+        switch outcome {
         case .passThrough:
             return event
         case .consume:

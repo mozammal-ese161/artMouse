@@ -51,7 +51,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // write the SAME instances on both paths — the bootstrap block below
         // gates only the engine. The log file is a sibling of settings.json
         // (SettingsStore.directory).
-        let hidLog = HIDEventLog(fileURL: store.directory.appendingPathComponent("devices.log"))
+        // `--device-log` (diagnostic launch flag): persist every raw HID
+        // observation to devices.log — the Device Analyzer's disk twin for
+        // headless debugging of physical-button mappings.
+        let hidLog = HIDEventLog(fileURL: store.directory.appendingPathComponent("devices.log"),
+                                 persistToFile: CommandLine.arguments.contains("--device-log"))
         let hidAnalyzer = HIDAnalyzerStore()
         appModel = AppModel(store: store, permissions: permissions, devices: devices,
                             watcher: appWatcher, hidLog: hidLog, hidAnalyzer: hidAnalyzer)
