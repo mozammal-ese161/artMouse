@@ -49,6 +49,23 @@ final class HIDEventLogTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: fileURL.path))
     }
 
+    /// Reopen path (Final Review Issue 3): the handle is closed on
+    /// toggle-off, so a record after toggling back on must still land in the
+    /// file.
+    func testPersistenceReopensAfterToggleOffAndOn() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let fileURL = dir.appendingPathComponent("devices.log")
+        let log = HIDEventLog(fileURL: fileURL, persistToFile: true)
+        log.record(observation())
+        log.setPersistToFile(false)
+        log.setPersistToFile(true)
+        log.record(observation(value: 7))
+        let contents = try String(contentsOf: fileURL, encoding: .utf8)
+        XCTAssertEqual(contents.split(separator: "\n").count, 2)
+        XCTAssertTrue(contents.contains("value=7"))
+    }
+
     func testClearAndAnalyzerBound() {
         let log = HIDEventLog(maxEntries: 2)
         log.record(observation())

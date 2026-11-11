@@ -12,7 +12,7 @@ public struct HIDDeviceIdentity: Equatable, Hashable {
     public var transport: String
 
     /// Stable settings key ("vid_pid") used for enable/disable sets and
-    /// future device profiles.
+    /// device profiles.
     public var settingsKey: String { Self.settingsKey(vendorID: vendorID, productID: productID) }
 
     /// Static form used by settings-code that only has VID/PID (not an

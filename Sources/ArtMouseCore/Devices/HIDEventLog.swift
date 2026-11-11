@@ -10,6 +10,12 @@ public final class HIDEventLog {
     public private(set) var persistToFile: Bool
     private let now: () -> Date
     private let formatter = ISO8601DateFormatter()
+    /// ONE handle kept open across records. The former per-line
+    /// open/seek/write/close cost 4-6 syscalls per observation on the main
+    /// run loop (at 1000 Hz that is every motion axis) and risked saturating
+    /// it (Final Review Issue 3). Closed — and reopened lazily by the next
+    /// record — on toggle-off, clear(), and deinit.
+    private var fileHandle: FileHandle?
 
     public init(maxEntries: Int = 500, fileURL: URL? = nil,
                 persistToFile: Bool = false, now: @escaping () -> Date = Date.init) {
@@ -34,20 +40,41 @@ public final class HIDEventLog {
 
     public var entries: [String] { buffer }
 
-    public func setPersistToFile(_ on: Bool) { persistToFile = on }
+    public func setPersistToFile(_ on: Bool) {
+        persistToFile = on
+        if !on { closeFileHandle() }
+    }
 
-    public func clear() { buffer.removeAll() }
+    public func clear() {
+        buffer.removeAll()
+        closeFileHandle()
+    }
 
     private func appendToDisk(_ line: String, url: URL) {
         guard let data = (line + "\n").data(using: .utf8) else { return }
-        if !FileManager.default.fileExists(atPath: url.path) {
-            try? data.write(to: url)
-            return
+        if fileHandle == nil {
+            // File-create path (first write when the file is absent): this
+            // line is the create write — open the handle after it so the
+            // records that follow reuse it instead of writing the line twice.
+            if !FileManager.default.fileExists(atPath: url.path) {
+                try? data.write(to: url)
+                fileHandle = try? FileHandle(forWritingTo: url)
+                return
+            }
+            guard let handle = try? FileHandle(forWritingTo: url) else { return }
+            fileHandle = handle
         }
-        if let handle = try? FileHandle(forWritingTo: url) {
-            defer { try? handle.close() }
-            _ = try? handle.seekToEnd()
-            try? handle.write(contentsOf: data)
-        }
+        guard let handle = fileHandle else { return }
+        _ = try? handle.seekToEnd()
+        try? handle.write(contentsOf: data)
     }
+
+    private func closeFileHandle() {
+        if let handle = fileHandle {
+            try? handle.close()
+        }
+        fileHandle = nil
+    }
+
+    deinit { closeFileHandle() }
 }

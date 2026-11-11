@@ -189,7 +189,14 @@ final class EngineBootstrap {
             },
             router: router,
             log: hidLog,
-            analyzer: hidAnalyzer)
+            analyzer: hidAnalyzer,
+            // Vendor wheel parts (Final Review Issue 2): the HID path has no
+            // real CGEvent for the router's .scrollTransform outcome to scale,
+            // so the pump materializes it as a wheel event posted here — the
+            // same shared tagged poster as every other synthetic event, so the
+            // tag makes the tap pass it through unrouted (no re-fire of the
+            // wheel binding).
+            poster: poster)
         hidPump.start()
         self.hidPump = hidPump
 
