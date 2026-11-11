@@ -72,6 +72,14 @@ public final class CGEventPoster: EventPosting {
     private func postKeyboardAsChord(_ event: CGEvent) {
         keyboardLock.lock()
         defer { keyboardLock.unlock() }
+        // MAIN-THREAD REQUIREMENT (hardware-found): the identical chord
+        // switches Spaces when posted from the main thread and silently does
+        // nothing from a background thread (macro tasks). Hop to main; the
+        // main-thread call path runs inline (no deadlock).
+        if !Thread.isMainThread {
+            DispatchQueue.main.sync { self.postKeyboardAsChord(event) }
+            return
+        }
         let keyCode = CGKeyCode(clamping: max(0, event.getIntegerValueField(.keyboardEventKeycode)))
         let flags = event.flags
         let mods = CGFlagConversion.modifierKeyCodes(for: flags)
