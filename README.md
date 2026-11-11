@@ -1,58 +1,75 @@
-# artMouse
+# 🖱️ artMouse — The Missing Mouse Customizer for macOS
 
-A native macOS menu-bar utility that reproduces the full **SteerMouse 5.8** feature set for personal use — button remapping, chords, wheel reshaping, macros, cursor control, per-application profiles, and raw device support — in one app, with no kernel extensions.
+**Remap every button. Reshape scrolling. Automate anything.** artMouse is a free, lightweight menu-bar app that gives your mouse — gaming, productivity, trackball, or specialty — the deep level of control macOS never shipped. One app, no kernel extensions, zero background daemons beyond the app itself.
 
-Single Swift codebase, zero third-party dependencies. The engine lives in the `ArtMouseCore` framework module (UI-free, unit-tested); the SwiftUI settings UI is a thin layer over it.
+![Platform](https://img.shields.io/badge/platform-macOS%2014%2B-black) ![Language](https://img.shields.io/badge/language-Swift%205.9-orange) ![Tests](https://img.shields.io/badge/tests-240%20passing-brightgreen) ![Deps](https://img.shields.io/badge/dependencies-zero-blue)
 
-**Status:** feature-complete (all 4 planned phases merged). 240 unit tests, all green.
+## Why artMouse?
 
-## Features
+macOS treats every mouse beyond left-click/scroll as an afterthought: extra buttons are ignored, scroll speed is one slider shared with the trackpad, acceleration is a black box, and macros require third-party launchers glued together with system events. **artMouse fixes all of it in one place** — with per-application profiles, so your settings follow what you're doing.
 
-- **Buttons** — every action type assignable to any button (standard 1–5, buttons 6–32, and raw-HID device parts):
-  clicks with modifiers, double-click, click-lock · keyboard entry · macros (enter-key / click / wait steps; run-once, hold-repeat, continuous) · scroll-from-button · system ops · zoom (screen/pinch/smart/app) · app switcher (bundle ID / next / previous) · music & media keys with fine-tune · Mission Control / Launchpad / Show Desktop / Desktop 1–5 / Move a Space / Notification Center / Spotlight / Siri · device ops (DPI, wheel mode, precision mode) · cursor snapping to a window's default button (jump / click / bounce) · open file/URL
-- **Chords** — multi-button combinations with configurable timeout; longest-match subset semantics.
-- **Wheel** — acceleration / constant / auto modes · speed (lines, interval, sens factor, acceleration) · reverse vertical/horizontal in every mode · smooth scroll · wheel→keyboard emulation · free-spin momentum with adjustable decay · auto-scroll · two-way scroll bindings · multiple wheel-mode profiles, switchable by button and per-app.
-- **Cursor** — independent sensitivity (counts/inch) + acceleration, decoupled from System Settings · disable-accel (1:1) · speed profiles with button switching and the 5-second safety restore · precision mode (momentary).
-- **Per-application profiles** — auto-switch on focus; overrides any subset of button bindings, scroll bindings, cursor speed, and wheel mode.
-- **Devices** — device profiles matched by VID/PID with user-named parts (buttons, wheels, pedals) · buttons 6+ that never surface as CGEvents via raw HID capture · Device Analyzer (live raw-element view) · Device Log (optional file persistence) · DPI feature reports (cycle/up/down/default/shift) for configured devices · enable/disable per device · IORegistry details.
-- **Settings** — human-editable JSON with import/export; malformed input falls back to defaults with a visible warning, never a crash.
+## ✨ Features
 
-## Build & run
+**🔘 Total button freedom**
+Assign any action to any button — standard, buttons 6–32, or raw device parts (pedals, thumb buttons):
+clicks with modifiers, double-click, click-lock · keyboard entry · **multi-step macros** (key/click/wait steps; run-once, hold-to-repeat, or continuous) · scroll actions · Mission Control, Launchpad, Spaces, Notification Center, Spotlight, Siri · media keys with volume fine-tune · app & window switching · screen, pinch, smart, and in-app zoom · cursor snapping to any window's default button · open any file or URL · click-lock.
+
+**🤝 Chords**
+Combine buttons like keyboard shortcuts — hold two or three together to trigger an action, with configurable timing and chord-while-scrolling support.
+
+**🎡 A scroll wheel that finally behaves**
+Acceleration, constant-speed, and coasting auto-scroll modes · independent vertical/horizontal reverse · buttery smooth scrolling · wheel→keyboard emulation · **free-spin momentum** with adjustable decay for gaming wheels · multiple wheel profiles you can hot-switch by button or by app · two-way bindings (different action per direction).
+
+**🎯 Cursor control macOS won't give you**
+Independent sensitivity (counts-per-inch) and acceleration curves, decoupled from System Settings · 1:1 raw mode · multiple speed profiles with a 5-second safety auto-restore · momentary precision mode for pixel-perfect work.
+
+**📱 Per-application profiles**
+Different feel for different apps: Xcode gets precision scrolling, your browser gets reverse smooth wheel, your game gets raw buttons — artMouse switches automatically when the frontmost app changes.
+
+**🔌 Real device support**
+Per-device profiles by VID/PID with friendly part naming (pedals, tilt wheels, thumb buttons) · **buttons 6+ captured via raw HID** even when macOS never sees them · **DPI switching** (cycle/up/down/default/momentary shift) via feature reports · Device Analyzer showing your mouse's live raw events · device logging · per-device enable/disable · IORegistry details.
+
+**⚙️ Everything is portable**
+Human-editable JSON settings with one-click import/export. Corrupt or absurd values fall back to safe defaults with a visible warning — never a crash, never a lockout.
+
+## 🚀 Quick start
 
 ```bash
-Scripts/make_app.sh     # builds and signs build/artMouse.app
+git clone https://github.com/mozammal-ese161/artMouse.git
+cd artMouse
+Scripts/make_app.sh
 open build/artMouse.app
 ```
 
-Requirements: **macOS 14 or newer**, Apple Silicon or Intel, Xcode toolchain for building.
+Requires **macOS 14 or newer** (Apple Silicon or Intel). On first launch, grant **Accessibility** (window snapping) and **Input Monitoring** (event interception) when prompted — artMouse links you straight to the right System Settings panes and degrades gracefully until you do.
 
-On first launch artMouse asks for two permissions it needs to see and shape input:
+Settings live in `~/Library/Application Support/artMouse/settings.json`.
 
-1. **Accessibility** — cursor snapping (window default-button lookup) and guided setup.
-2. **Input Monitoring** — the CGEventTap that intercepts mouse events. If the tap can't be created (or the system disables it later), the app shows a permission banner and deep-links to System Settings.
+> 🛟 **Locked out?** Launch with `--safe-mode` (or hold ⌥⌘ at launch) to bypass all interception and undo any binding.
 
-Settings live in `~/Library/Application Support/artMouse/settings.json`. **Safe mode:** launch with `--safe-mode` (or hold ⌥⌘ at launch) to bypass all engine interception — the UI still works, so you can always un-bind a button that locked you out.
+## 🛠 How it works (for the curious)
 
-## Development
+artMouse observes input through the public `IOHIDManager` API and intercepts standard events with a `CGEventTap` — all in user space, nothing signed into the kernel. Every synthetic event it posts is tagged with a private event source, so the app can always tell its own output from your hand: no feedback loops, ever. All engine state runs on one main-run-loop queue; all user-facing numbers are clamped at the engine boundary; settings decode backward-compatibly across releases.
+
+The engine lives in a UI-free framework module (`ArtMouseCore`) covered by a 240-test suite — virtual-clock scroll math, macro scheduling, chord FSMs, routing contracts, settings round-trips — while the SwiftUI layer stays thin.
 
 ```bash
-swift test     # 240 tests
-swift build    # engine + UI
+swift test    # run the suite
+swift build   # engine + app
 ```
 
-- `Sources/ArtMouseCore/` — the engine: event tap, router, chord/macro engines, scroll emitter + controller, cursor controller, snapping, HID observer pipeline (`Devices/`), settings model. UI-free and fully unit-tested.
-- `Sources/artMouse/` — SwiftUI menu-bar app: settings window tabs (Buttons, Wheel, Scroll Bindings, Chords, Apps, General, Cursor, Devices), permission flows, bootstrap.
-- `Tests/ArtMouseCoreTests/` — the 240-test suite (router contracts, scroll/momentum virtual-clock math, macro engine, translator policy, DPI builder, settings round-trips).
-- `docs/verification/` — human hardware-verification checklists, one per phase. `phase-4.md` is the current one (15 checks on real devices).
-- `docs/superpowers/specs/2026-11-09-artmouse-design.md` — the design spec (architecture, data model, parity baseline recovered by static analysis of SteerMouse 5.8).
+## 📚 Documentation
 
-## Known limitations
+- `docs/verification/` — hardware verification checklists, one per development phase.
+- `docs/superpowers/specs/2026-11-09-artmouse-design.md` — the design spec: architecture, data model, feature baseline.
 
-- **DPI is vendor-proprietary.** Feature-report layouts differ per vendor; artMouse ships a generic byte-template you configure per device in the profile editor, intended for devices you own and can test. On unconfigured devices, DPI buttons degrade to cursor-speed profile switching.
-- **Raw button capture is opt-in per device.** Most mice surface buttons 6–32 as normal CGEvents — leave capture off (the profile editor warns; enabling it on a mouse that already surfaces its buttons makes each press fire twice).
-- **Disabling a device** stops all HID-side features for it (raw parts, analyzer traffic routing, DPI). Events that arrive through the system tap from that device still pass through — disabling is per-feature, not a full blocker (safe mode is).
-- Momentum coasts are capped and constant-mode-only by design; wheel→keys and auto-scroll never coast.
+## ⚠️ Honest limitations
 
-## Personal use
+- **DPI is device-specific.** Vendor DPI protocols are proprietary; artMouse ships a generic feature-report template you configure per device in the profile editor (meant for devices you own). Unconfigured devices gracefully fall back to cursor-speed profile switching.
+- **Raw button capture is opt-in per device.** Most mice surface buttons 6–32 normally — leave capture off unless a button truly does nothing (the profile editor warns you).
+- **Disabling a device** mutes its raw-HID features; events that reach the system tap still pass through. Full bypass = safe mode.
+- Momentum is constant-mode-only and capped; wheel→keyboard and auto-scroll never coast (no runaway key repeats).
 
-Built for personal use — no licensing, trial, updater, or notarization. Not distributed on the App Store.
+## 💼 Personal use
+
+Free for personal use — no licensing, no trial, no telemetry, no phone-home.

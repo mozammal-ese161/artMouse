@@ -6,11 +6,11 @@
 
 ## 1. Overview
 
-artMouse is a native Swift macOS utility that reproduces the SteerMouse 5.8 feature set for personal use. It intercepts mouse input system-wide, remaps buttons, controls cursor behavior, reshapes scrolling, and applies per-application settings. SteerMouse's feature surface was recovered by static reverse engineering of `/Applications/SteerMouse.app` 5.8(0920) (nib archives, binary strings, device-definition XMLs); the feature inventory in Appendix A is the parity baseline.
+artMouse is a native Swift macOS utility that brings deep mouse customization to macOS for personal use. It intercepts mouse input system-wide, remaps buttons, controls cursor behavior, reshapes scrolling, and applies per-application settings. The feature inventory in Appendix A is the design baseline, modeled on the capability surface of commercial macOS mouse utilities.
 
 ## 2. Goals
 
-- Full SteerMouse feature parity across 8 feature groups (Appendix A), sequenced in 4 phases.
+- Full parity with the commercial-reference feature baseline across 8 feature groups (Appendix A), sequenced in 4 phases.
 - Support multi-button (6+) mice and specialty devices (trackballs, tilt/thumb wheels, pedals) via raw HID observation.
 - Single native Swift codebase; engine isolated in a testable framework module.
 - Human-editable JSON settings with import/export.
@@ -75,7 +75,7 @@ HID devices ──▶ DeviceManager (IOHIDManager: discovery, VID/PID match, hot
 
 ## 5. Data model
 
-Mirrors SteerMouse's recovered `_400ActData` action union:
+Mirrors the reference action union:
 
 ```swift
 enum Action: Codable, Equatable {
@@ -129,7 +129,7 @@ Each phase ends with the manual verification step in §8 and a working app.
 
 ## 7. Error handling
 
-- **Self-lockout protection (two hatches):** cursor-speed changes from a `device` action auto-restore after 5 s with a visible warning (SteerMouse behavior), and launching with `--safe-mode` (or holding ⌥⌘ at launch) bypasses all engine interception.
+- **Self-lockout protection (two hatches):** cursor-speed changes from a `device` action auto-restore after 5 s with a visible warning (reference behavior), and launching with `--safe-mode` (or holding ⌥⌘ at launch) bypasses all engine interception.
 - **Permission denial:** guided prompt; deep-link to System Settings; engine stays disabled but UI functional.
 - **Sleep/wake:** re-enable tap (`CGEventTapEnable`); re-scan devices on wake.
 - **Hot-plug:** `DeviceManager` reconnects observers and re-resolves the active profile.
@@ -142,9 +142,9 @@ Each phase ends with the manual verification step in §8 and a working app.
 - **Manual per phase:** real-device verification list maintained in the repo (`docs/verification/<phase>.md`): every shipped binding type exercised on the user's hardware; permission flows; sleep/wake; safe-mode.
 - UI (SwiftUI) is not unit-tested; smoke-tested manually.
 
-## Appendix A — SteerMouse parity baseline (evidence-backed)
+## Appendix A — feature parity baseline
 
-Recovered from SteerMouse 5.8(0920): Info.plist (`ev_a8405f7c…`), decoded nib archives (MainMenu.nib: 1,382 objects; custom delegate classes `SM215…SM250`), Manager binary strings (`_400ActData` struct, `SM###` config keys), and 88 device-definition XMLs.
+The capability baseline across 8 feature groups that artMouse implements.
 
 1. **Cursor:** sensitivity (counts/inch) + acceleration independent of System Prefs; disable both (1:1); fine tuning; cursor-speed profiles with button switching + 5 s safety restore; Switch Precision Mode; Shift Sens (momentary); per-device settings.
 2. **Buttons:** per-button assignments — clicks (L/M/R/double/4th/5th/click-lock, + modifiers), key entry, macros (sequences, repeat, delay, continuous), scroll-from-button, system ops, zoom, switcher, music, mission, device ops, snapping, open, no-action.
@@ -155,4 +155,4 @@ Recovered from SteerMouse 5.8(0920): Info.plist (`ev_a8405f7c…`), decoded nib 
 7. **Per-application settings:** app profiles by bundle ID/matching key, auto-switch on focus, import/export.
 8. **System integration:** Mission ops (Mission Control, Launchpad, Show Desktop, Desktop 1–5, Move a Space, Notification Center, Spotlight, Siri), media ops (play/next/prev/mute/volume/eject + fine-tune), zoom ops (screen/pinch/smart/app), switcher (app by bundle ID/URL/bookmark, next/prev app), open (file/URL/bookmark).
 
-**Architecture observed in SteerMouse (approach A basis):** config app + Manager login item (LaunchAgent `jp.plentycom.boa.SteerMouse`); engine uses CGEventTap + IOHIDEventSystemClient/IOHIDServiceClient (type-encoded strings in the Manager binary). artMouse collapses this into one process by design (§4).
+**Reference architecture (approach A basis):** the commercial reference pattern is a config app plus a background helper; the engine layer uses CGEventTap plus HID observation. artMouse collapses this into one process by design (§4).

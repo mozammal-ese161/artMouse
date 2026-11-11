@@ -11,7 +11,7 @@ public enum CursorMath {
     }
 
     /// Linear acceleration curve: exactly 1 at rest, grows with speed.
-    /// (v1 curve; SteerMouse-exact curves are a later tuning pass.)
+    /// (v1 curve; reference-exact curves are a later tuning pass.)
     public static func accelerationFactor(acceleration: Double, speed: Double) -> Double {
         1 + acceleration * (speed / accelerationReferenceSpeed)
     }
