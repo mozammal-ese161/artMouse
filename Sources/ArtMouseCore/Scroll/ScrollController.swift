@@ -51,6 +51,7 @@ public final class ScrollController: ScrollControlling, WheelModeSwitching {
         let stopTicks = Int(Double(profile.autoStopTicks).clamped(1...100))
 
         var direction = Self.direction(axis: axis, ticks: ticks)
+        var flipped = false
         // Reverse applies to EVERY mode: flipping the derived direction up
         // front means keys/smooth/constant/auto intercepts and the
         // acceleration scale all travel the reversed way (fix round: reverse
@@ -58,12 +59,14 @@ public final class ScrollController: ScrollControlling, WheelModeSwitching {
         if (axis == .vertical && profile.reverseVertical)
             || (axis == .horizontal && profile.reverseHorizontal) {
             direction = direction.flipped
+            flipped = true
         }
 
         // Trackball convention (global option, spec A.4): thumb-operated
         // trackballs report horizontal deltas mirrored; flip the sign.
         if axis == .horizontal && store.settings.trackballHorizontalFlip {
             direction = direction.flipped
+            flipped.toggle()
         }
 
         // 1. Wheel→keys takes absolute precedence.
@@ -89,8 +92,8 @@ public final class ScrollController: ScrollControlling, WheelModeSwitching {
         switch profile.mode {
         case .acceleration:
             if autoDirection != nil { emitter.stop(); autoDirection = nil }   // fix round 2: end a live auto
-            return Self.scaleOutcome(axis: direction, magnitude: Double(abs(ticks)),
-                                     sens: sens, accel: accel)
+            return Self.scaleOutcome(axis: axis, magnitude: Double(abs(ticks)),
+                                     sens: sens, accel: accel, flipped: flipped)
         case .constant:
             if autoDirection != nil { emitter.stop(); autoDirection = nil }   // fix round 1: end a live auto
             emitter.emitOnce(direction: direction, lines: lines)
@@ -124,16 +127,19 @@ public final class ScrollController: ScrollControlling, WheelModeSwitching {
         ScrollDirection.derived(axis: axis, ticks: ticks)
     }
 
-    /// Sign and magnitude of the acceleration scale for one tick. `axis` is
-    /// the (already reverse-flipped) direction, so the sign comes from the
-    /// direction itself and the non-ticked axis stays at 1.0.
-    static func scaleOutcome(axis: ScrollDirection, magnitude: Double, sens: Double,
-                             accel: Double) -> ScrollDisposition {
+    /// Acceleration scale for one tick: pure magnitude scaling. The native
+    /// delta's direction is PRESERVED — multiplying by the derived
+    /// direction's sign inverted every down/left scroll on real hardware
+    /// (user report: "scrolling only goes up"). The only sign change is
+    /// `flipped`, set by the reverse/trackball flags; the non-ticked axis
+    /// stays at 1.0.
+    static func scaleOutcome(axis: ScrollAxis, magnitude: Double, sens: Double,
+                             accel: Double, flipped: Bool) -> ScrollDisposition {
         let accelFactor = 1 + accel * (magnitude / accelerationReferenceTicks)
-        let factor = sens * accelFactor * axis.sign
+        let factor = sens * accelFactor * (flipped ? -1 : 1)
         var vertical = 1.0
         var horizontal = 1.0
-        switch axis.axis {
+        switch axis {
         case .vertical: vertical = factor
         case .horizontal: horizontal = factor
         }

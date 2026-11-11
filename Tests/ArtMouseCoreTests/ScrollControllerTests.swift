@@ -29,6 +29,25 @@ final class ScrollControllerTests: XCTestCase {
                        .scale(vertical: 4.0, horizontal: 1.0))
     }
 
+    func testAccelerationModePreservesDownDirection() {
+        // Hardware regression (user report: "scrolling only goes up"): down
+        // rolls arrive as negative ticks, and the old factor multiplied them
+        // by the direction's sign (-1), inverting every down-scroll. Scaling
+        // is magnitude-only — the negative native delta stays negative; the
+        // reverse flags are the only sign changers.
+        let store = makeStore(profiles: [WheelModeProfile(name: "Default", sensFactor: 2.0, acceleration: 1.0)])
+        let controller = ScrollController(store: store, emitter: ScrollEmitter(poster: poster))
+        XCTAssertEqual(controller.disposition(forScroll: .vertical, ticks: -3),
+                       .scale(vertical: 4.0, horizontal: 1.0))
+        let horizontal = controller.disposition(forScroll: .horizontal, ticks: -2)
+        if case .scale(let v, let h) = horizontal {
+            XCTAssertEqual(v, 1.0)
+            XCTAssertEqual(h, 10.0 / 3.0, accuracy: 0.0001)   // 2 × (1 + 2/3)
+        } else {
+            XCTFail("expected scale, got \(horizontal)")
+        }
+    }
+
     func testReverseFlipsSign() {
         let store = makeStore(profiles: [WheelModeProfile(name: "Default", reverseVertical: true)])
         let controller = ScrollController(store: store, emitter: ScrollEmitter(poster: poster))
