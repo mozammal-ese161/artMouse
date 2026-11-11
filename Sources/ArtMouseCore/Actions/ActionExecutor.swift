@@ -29,6 +29,9 @@ public final class ActionExecutor: ActionExecuting {
     /// Weak for the same cycle reason: the snapping controller is engine-owned
     /// state assembled alongside the executor (Task 4).
     private weak var snapping: SnappingPerforming?
+    /// Weak like the other coordinators: scroll- and chord-fired macros run
+    /// through the executor (unlike button macros, which the router arms).
+    private weak var macros: MacroCoordinating?
     /// Weak for the same cycle reason: the DPI manager is engine-owned state
     /// anchored by the bootstrap alongside the executor (Task 7); its Bool is
     /// "report actually sent" and false degrades to cursor switching (spec §3).
@@ -44,6 +47,7 @@ public final class ActionExecutor: ActionExecuting {
                 wheel: WheelModeSwitching? = nil,
                 snapping: SnappingPerforming? = nil,
                 dpi: DPICoordinating? = nil,
+                macros: MacroCoordinating? = nil,
                 cursorLocation: @escaping () -> CGPoint = { CGEvent(source: nil)?.location ?? .zero }) {
         self.poster = poster
         self.workspace = workspace
@@ -51,6 +55,7 @@ public final class ActionExecutor: ActionExecuting {
         self.wheel = wheel
         self.snapping = snapping
         self.dpi = dpi
+        self.macros = macros
         self.cursorLocation = cursorLocation
     }
 
@@ -62,8 +67,11 @@ public final class ActionExecutor: ActionExecuting {
             performClick(op, mods: mods)
         case .mission, .music, .zoom, .switcher, .open, .device:
             performAction(action)   // Task 10 replaces this stub dispatch
-        case .macro:
-            break   // MacroEngine routing lands in Task 3
+        case .macro(let steps, let repeatMode, let intervalMS, let proxy):
+            // Scroll- and chord-fired macros have no button registration —
+            // hold-mode degrades to a single pass (no release ends them).
+            macros?.runOnce(program: MacroProgram(steps: steps, repeatMode: repeatMode == .hold ? .none : repeatMode,
+                                                  repeatIntervalMS: intervalMS, modifierProxy: proxy))
         case .snapping(let op):
             snapping?.perform(op)
         case .scroll(let spec):

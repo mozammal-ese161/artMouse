@@ -23,6 +23,10 @@ public protocol CursorControlling: AnyObject {
 public protocol MacroCoordinating: AnyObject {
     func run(program: MacroProgram, for button: ButtonID)
     func stop(for button: ButtonID)
+    /// One-shot program run with no button registration — scroll-binding
+    /// and chord macros fire without a button to stop them, so hold-mode
+    /// programs degrade to a single pass (no release exists to end them).
+    func runOnce(program: MacroProgram)
 }
 
 public final class EventRouter: EventRouting {

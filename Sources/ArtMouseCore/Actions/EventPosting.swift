@@ -52,17 +52,23 @@ public final class CGEventPoster: EventPosting {
     private let keyboardSource = CGEventSource(stateID: .combinedSessionState)
     /// Modifier keys currently held by an in-flight keyboard chord.
     private var heldModifiers: [(CGEventFlags, CGKeyCode)] = []
+    /// Last chorded key press, for the minimum-hold enforcement.
+    private var lastKeyHold: (keyCode: Int64, at: Date)?
+    /// Minimum key-hold for chorded keys: a zero-length tap never registers
+    /// with the Spaces switcher (macro engine posts down/up back-to-back).
+    private static let minimumKeyHold: TimeInterval = 0.05
     private let keyboardLock = NSLock()
 
     /// Expands a flag-carrying keyboard post into a REAL modifier chord:
     /// modifier key(s) down → key down → key up → modifier key(s) up, all
-    /// from the combined-session source and untagged. A single event with
-    /// pre-set flags — from a transient or private source — is silently
-    /// ignored by system shortcuts on this macOS build. Keyboard events
+    /// from the combined-session source and untagged. Two hardware-found
+    /// requirements (macOS 26): the chord must come from a persistent
+    /// combined-session-state source, and it must be posted at the SESSION
+    /// tap — a HID-tap chord never switches Spaces here. Keyboard events
     /// cannot loop: no binding triggers on keyboard events (they translate
-    /// to `.other`), so the private-source tag is neither needed nor wanted
-    /// here. The chord runs on the posting thread (~50 ms with the inter-
-    /// event delays); the lock serializes the rare concurrent post.
+    /// to `.other`), so the private-source tag is neither needed nor wanted.
+    /// The chord runs on the posting thread (~50 ms with the inter-event
+    /// delays); the lock serializes the rare concurrent post.
     private func postKeyboardAsChord(_ event: CGEvent) {
         keyboardLock.lock()
         defer { keyboardLock.unlock() }
@@ -72,27 +78,40 @@ public final class CGEventPoster: EventPosting {
         if event.type == .keyDown {
             for (f, mk) in mods {
                 if let d = CGEvent(keyboardEventSource: keyboardSource, virtualKey: mk, keyDown: true) {
-                    d.post(tap: .cghidEventTap)
+                    d.post(tap: .cgSessionEventTap)
                     usleep(15_000)
                 }
             }
             heldModifiers = mods
             if let d = CGEvent(keyboardEventSource: keyboardSource, virtualKey: keyCode, keyDown: true) {
                 d.flags = flags
-                d.post(tap: .cghidEventTap)
+                d.post(tap: .cgSessionEventTap)
             }
+            // Spaces switching drops chords whose key bounces instantly; hold
+            // the key for a human-scale moment before the matching up arrives.
+            lastKeyHold = (Int64(keyCode), Date())
         } else {
+            // Enforce a minimum key hold: the macro engine posts key down and
+            // up back-to-back, and a zero-length tap never registers with the
+            // Spaces switcher.
+            if lastKeyHold?.keyCode == Int64(keyCode) {
+                let elapsed = Date().timeIntervalSince(lastKeyHold!.at)
+                if elapsed < Self.minimumKeyHold {
+                    usleep(UInt32((Self.minimumKeyHold - elapsed) * 1_000_000))
+                }
+            }
             if let u = CGEvent(keyboardEventSource: keyboardSource, virtualKey: keyCode, keyDown: false) {
                 u.flags = flags
-                u.post(tap: .cghidEventTap)
+                u.post(tap: .cgSessionEventTap)
             }
             for (f, mk) in heldModifiers.reversed() {
                 if let u = CGEvent(keyboardEventSource: keyboardSource, virtualKey: mk, keyDown: false) {
-                    u.post(tap: .cghidEventTap)
+                    u.post(tap: .cgSessionEventTap)
                     usleep(15_000)
                 }
             }
             heldModifiers = []
+            lastKeyHold = nil
         }
     }
 

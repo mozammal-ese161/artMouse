@@ -3,6 +3,29 @@ import CoreGraphics
 import Foundation
 @testable import ArtMouseCore
 
+
+/// Records runOnce programs — scroll- and chord-fired macros (Phase 4).
+final class RecordingMacroCoordinator: MacroCoordinating {
+    private(set) var runOncePrograms: [MacroProgram] = []
+    private(set) var ran: [(MacroProgram, ButtonID)] = []
+    private(set) var stopped: [ButtonID] = []
+    func runOnce(program: MacroProgram) { runOncePrograms.append(program) }
+    func run(program: MacroProgram, for button: ButtonID) { ran.append((program, button)) }
+    func stop(for button: ButtonID) { stopped.append(button) }
+}
+
+final class StubCursorFull: CursorCoordinating {
+    private(set) var nextCalls = 0
+    private(set) var defaultCalls = 0
+    private(set) var precisionBegins = 0
+    private(set) var precisionEnds = 0
+    func outcome(forMove event: InputEvent) -> RouterOutcome { .passThrough }
+    func activateNext(source: ProfileSwitchSource) { nextCalls += 1 }
+    func activateDefault() { defaultCalls += 1 }
+    func beginPrecision() { precisionBegins += 1 }
+    func endPrecision() { precisionEnds += 1 }
+}
+
 final class ActionExecutorTests: XCTestCase {
     // SDK adaptation: this SDK omits the deprecated CGEvent.integerValueField(_:) accessor;
     // the read-only getIntegerValueField(_:) form is used everywhere below.
@@ -216,5 +239,31 @@ final class RecordingPoster: EventPosting {
         lock.lock()
         storedEvents.removeAll()
         lock.unlock()
+    }
+}
+
+final class ExecutorMacroRoutingTests: XCTestCase {
+
+    func testScrollFiredMacroRunsOnceWithoutButton() {
+        // Tilt/scroll bindings fire macros through executor.perform (the
+        // router's macro arm only covers button-down): the program must run
+        // ONCE with no button registration, and hold-mode degrades to
+        // run-once (no release exists to end a hold loop).
+        let macros = RecordingMacroCoordinator()
+        let executor = ActionExecutor(poster: RecordingPoster(), macros: macros)
+        executor.perform(.macro(steps: [.enterKey(keyCode: 124, mods: [.control])],
+                                repeatMode: .hold, repeatIntervalMS: 10, modifierProxy: false))
+        XCTAssertEqual(macros.runOncePrograms.count, 1)
+        XCTAssertEqual(macros.runOncePrograms.first?.repeatMode, RepeatMode.none)   // hold degraded
+        XCTAssertEqual(macros.runOncePrograms.first?.steps.count, 1)
+        XCTAssertTrue(macros.ran.isEmpty)   // no button registration for scroll-fired macros
+    }
+
+    func testChordFiredMacroRunsThroughExecutor() {
+        let macros = RecordingMacroCoordinator()
+        let executor = ActionExecutor(poster: RecordingPoster(), macros: macros)
+        executor.perform(.macro(steps: [.click(op: .left, mods: [])],
+                                repeatMode: .none, repeatIntervalMS: 0, modifierProxy: false))
+        XCTAssertEqual(macros.runOncePrograms.count, 1)
     }
 }

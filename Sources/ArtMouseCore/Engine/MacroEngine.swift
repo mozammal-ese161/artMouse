@@ -200,7 +200,20 @@ public final class MacroEngine {
 /// the button's program, a button-up stops a hold-mode loop. Same main-run
 /// loop calling discipline as every other coordinator (only run/stop mutate
 /// the registries; the spawned Tasks only post events and sleep).
-extension MacroEngine: MacroCoordinating {}
+extension MacroEngine: MacroCoordinating {
+    public func runOnce(program: MacroProgram) {
+        // Hold-mode degrades to one pass: a scroll- or chord-fired program
+        // has no button release to end a hold loop.
+        let effective = program.repeatMode == .hold
+            ? MacroProgram(steps: program.steps, repeatMode: .none,
+                           repeatIntervalMS: program.repeatIntervalMS,
+                           modifierProxy: program.modifierProxy)
+            : program
+        Task { [weak self] in
+            await self?.runLoop(program: effective)
+        }
+    }
+}
 
 private extension Int {
     func clamped(_ range: ClosedRange<Int>) -> Int {

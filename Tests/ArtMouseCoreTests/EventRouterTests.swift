@@ -337,8 +337,10 @@ final class StubWatcher: FrontmostProviding {
 final class RecordingMacroEngine: MacroCoordinating {
     private(set) var ran: [(MacroProgram, ButtonID)] = []
     private(set) var stopped: [ButtonID] = []
+    private(set) var runOncePrograms: [MacroProgram] = []
     func run(program: MacroProgram, for button: ButtonID) { ran.append((program, button)) }
     func stop(for button: ButtonID) { stopped.append(button) }
+    func runOnce(program: MacroProgram) { runOncePrograms.append(program) }
 }
 
 final class RouterChordTests: XCTestCase {

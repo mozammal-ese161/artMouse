@@ -135,7 +135,7 @@ final class EngineBootstrap {
             })
         self.dpiManager = dpiManager
         let executor = ActionExecutor(poster: poster, cursor: cursorController, wheel: scrollController,
-                                      snapping: snappingController, dpi: dpiManager)
+                                      snapping: snappingController, dpi: dpiManager, macros: macroEngine)
         let clickLock = ClickLockCoordinator(executor: executor)
         let router = EventRouter(settings: store, executor: executor,
                                  clickLock: clickLock, cursor: cursorController,
