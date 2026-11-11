@@ -259,18 +259,15 @@ final class AppModel {
 
     // MARK: Devices (Phase 4)
 
-    /// Creates a skeleton profile for an attached device and returns it. The
-    /// profile editor sheet then fills parts/DPI.
-    @discardableResult
-    func addDeviceProfile(for device: HIDDeviceIdentity) -> DeviceProfile {
-        let profile = DeviceProfile(name: device.name,
-                                    vendorID: device.vendorID,
-                                    productID: device.productID)
+    /// Stores a profile authored in the editor sheet. The sheet builds its
+    /// own draft (the stored profile, or a fresh skeleton for the device),
+    /// so persistence happens only on Save — opening the editor no longer
+    /// stores a skeleton that Cancel could not undo.
+    func addDeviceProfile(_ profile: DeviceProfile) {
         var settings = store.settings
         settings.deviceProfiles.append(profile)
         store.settings = settings
         save()
-        return profile
     }
 
     func updateDeviceProfile(_ profile: DeviceProfile) {

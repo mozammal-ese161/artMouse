@@ -3,22 +3,33 @@ import ArtMouseCore
 
 /// Modal editor for one device profile (parts + DPI). Unlike the inline row
 /// editors (which derive from props and call `onUpdate` per keystroke), a
-/// modal sheet owns its draft: edits accumulate in `@State` and are written
-/// through `onSave` exactly once on Save; Cancel and Delete never write.
+/// modal sheet owns its draft: the draft is built HERE from the edited
+/// device (the stored profile when one exists, otherwise a fresh skeleton —
+/// never persisted on open, so Cancel leaves a profile-less device
+/// profile-less), edits accumulate in `@State`, and everything is written
+/// through `onSave` exactly once on Save; Cancel and Delete never create.
 struct DeviceProfileEditorSheet: View {
-    let initial: DeviceProfile
+    let device: HIDDeviceIdentity
+    /// The stored profile for `device`, or nil when the sheet authors a new
+    /// one (Save then routes through addDeviceProfile; Delete is a harmless
+    /// no-op for a draft that was never stored).
+    let existing: DeviceProfile?
     let onSave: (DeviceProfile) -> Void
     let onDelete: (DeviceProfile) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var draft: DeviceProfile
 
-    init(initial: DeviceProfile,
+    init(device: HIDDeviceIdentity,
+         existing: DeviceProfile?,
          onSave: @escaping (DeviceProfile) -> Void,
          onDelete: @escaping (DeviceProfile) -> Void) {
-        self.initial = initial
+        self.device = device
+        self.existing = existing
         self.onSave = onSave
         self.onDelete = onDelete
-        _draft = State(initialValue: initial)
+        _draft = State(initialValue: existing ?? DeviceProfile(name: device.name,
+                                                               vendorID: device.vendorID,
+                                                               productID: device.productID))
     }
 
     var body: some View {
@@ -123,45 +134,64 @@ private struct DevicePartEditorRow: View {
     let onRemove: () -> Void
 
     var body: some View {
-        HStack(spacing: 8) {
-            TextField("Name", text: $part.name)
-                .frame(width: 100)
-            Picker("Kind", selection: Binding(
-                get: { part.kind },
-                set: { newKind in
-                    part.kind = newKind
-                    // Wheel parts must not route as a button; button/pedal
-                    // parts always need a target, so give a skeleton one that
-                    // no sibling part already claims.
-                    if newKind == .wheel {
-                        part.routesAsButton = nil
-                    } else if part.routesAsButton == nil {
-                        part.routesAsButton = DeviceProfileEditorSheet
-                            .nextFreeRoutingNumber(avoiding: takenRoutingNumbers)
-                    }
-                })) {
-                Text("Button").tag(DevicePartKind.button)
-                Text("Wheel").tag(DevicePartKind.wheel)
-                Text("Pedal").tag(DevicePartKind.pedal)
-            }
-            // Wide enough to show "label + selected value" (96 clipped the
-            // value to a bare chevron on the grouped-form style).
-            .frame(width: 130)
-            SafeIntField("Page", value: $part.usagePage, in: 0...65535, width: 70)
-            SafeIntField("Usage", value: $part.usage, in: 0...65535, width: 70)
-            if part.kind != .wheel {
-                Picker("Routes as", selection: Binding(
-                    get: { part.routesAsButton ?? 5 },
-                    set: { part.routesAsButton = $0 })) {
-                    ForEach(5...31, id: \.self) { number in
-                        Text("Button \(number + 1)").tag(number)
-                    }
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                TextField("Name", text: $part.name)
+                    .frame(width: 100)
+                Picker("Kind", selection: Binding(
+                    get: { part.kind },
+                    set: { newKind in
+                        part.kind = newKind
+                        // Wheel parts must not route as a button; button/pedal
+                        // parts always need a target, so give a skeleton one that
+                        // no sibling part already claims.
+                        if newKind == .wheel {
+                            part.routesAsButton = nil
+                        } else if part.routesAsButton == nil {
+                            part.routesAsButton = DeviceProfileEditorSheet
+                                .nextFreeRoutingNumber(avoiding: takenRoutingNumbers)
+                        }
+                    })) {
+                    Text("Button").tag(DevicePartKind.button)
+                    Text("Wheel").tag(DevicePartKind.wheel)
+                    Text("Pedal").tag(DevicePartKind.pedal)
                 }
-                .frame(width: 120)
+                // Wide enough to show "label + selected value" (96 clipped the
+                // value to a bare chevron on the grouped-form style).
+                .frame(width: 130)
+                SafeIntField("Page", value: $part.usagePage, in: 0...65535, width: 70)
+                SafeIntField("Usage", value: $part.usage, in: 0...65535, width: 70)
+                if part.kind != .wheel {
+                    Picker("Routes as", selection: Binding(
+                        get: { part.routesAsButton ?? 5 },
+                        set: { part.routesAsButton = $0 })) {
+                        ForEach(5...31, id: \.self) { number in
+                            Text("Button \(number + 1)").tag(number)
+                        }
+                    }
+                    .frame(width: 120)
+                }
+                Spacer()
+                Button(role: .destructive, action: onRemove) { Image(systemName: "trash") }
             }
-            Spacer()
-            Button(role: .destructive, action: onRemove) { Image(systemName: "trash") }
+            if targetsStandardWheelUsage {
+                // A profile part wins over the translator's tap-covered-usage
+                // drop rule, so claiming the standard wheel/AC Pan usages
+                // feeds every roll twice: once as macOS's own scrollWheel
+                // event, once as the part's routed tick.
+                Text("macOS already delivers this usage as scroll events — the part will double-fire.")
+                    .font(.caption).foregroundStyle(.orange)
+            }
         }
+    }
+
+    /// Wheel parts targeting the standard wheel (GD_Wheel) or horizontal
+    /// tilt (GD_AC_Pan) usages on the generic-desktop page — the usages
+    /// macOS already delivers as scrollWheel CGEvents.
+    private var targetsStandardWheelUsage: Bool {
+        part.kind == .wheel
+            && part.usagePage == HIDUsage.genericDesktopPage
+            && (part.usage == HIDUsage.gdWheel || part.usage == HIDUsage.gdACPan)
     }
 }
 

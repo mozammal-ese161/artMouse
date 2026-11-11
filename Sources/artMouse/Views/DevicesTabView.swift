@@ -4,7 +4,10 @@ import ArtMouseCore
 struct DevicesTabView: View {
     let model: AppModel
     @State private var analyzerDevice: HIDDeviceIdentity?
-    @State private var editingProfile: DeviceProfile?
+    /// The edited DEVICE (not a profile): the sheet builds its own draft, so
+    /// merely opening the editor never persists a skeleton profile (Final
+    /// Review Minor 6 — Cancel must leave a profile-less device profile-less).
+    @State private var editingDevice: HIDDeviceIdentity?
 
     var body: some View {
         List(model.devices.devices, id: \.settingsKey) { device in
@@ -26,10 +29,7 @@ struct DevicesTabView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 HStack {
-                    Button("Edit Profile…") {
-                        editingProfile = model.deviceProfile(for: device)
-                            ?? model.addDeviceProfile(for: device)
-                    }
+                    Button("Edit Profile…") { editingDevice = device }
                     Button("Analyze…") { analyzerDevice = device }
                 }
                 .buttonStyle(.link)
@@ -39,10 +39,17 @@ struct DevicesTabView: View {
         .sheet(item: $analyzerDevice) { device in
             DeviceAnalyzerSheet(device: device, model: model)
         }
-        .sheet(item: $editingProfile) { profile in
+        .sheet(item: $editingDevice) { device in
             DeviceProfileEditorSheet(
-                initial: profile,
-                onSave: { model.updateDeviceProfile($0) },
+                device: device,
+                existing: model.deviceProfile(for: device),
+                onSave: { profile in
+                    if model.deviceProfile(for: device) != nil {
+                        model.updateDeviceProfile(profile)
+                    } else {
+                        model.addDeviceProfile(profile)
+                    }
+                },
                 onDelete: { model.removeDeviceProfile($0.id) })
         }
     }

@@ -78,7 +78,7 @@ struct SafeIntField: View {
             TextField("", text: $text)
                 .frame(width: width)
                 .onAppear { text = String(value) }
-                .onChange(of: text) { raw in
+                .onChange(of: text) { _, raw in
                     if let parsed = Double(raw), parsed.isFinite,
                        parsed >= Double(range.lowerBound), parsed <= Double(range.upperBound) {
                         value = Int(parsed)
@@ -89,7 +89,7 @@ struct SafeIntField: View {
                         text = String(value)   // snap garbage back, like the old derived text
                     }
                 }
-                .onChange(of: value) { text = String($0) }   // external changes resync the field
+                .onChange(of: value) { _, newValue in text = String(newValue) }   // external changes resync the field
         }
     }
 }
