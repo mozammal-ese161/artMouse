@@ -35,4 +35,17 @@ public enum CGFlagConversion {
         if modKeys.contains(.shift) { flags.insert(.maskShift) }
         return flags
     }
+
+    /// ANSI left-side modifier keycodes for each flag, in canonical order —
+    /// the keyboard chord poster presses these as REAL keys around a
+    /// shortcut key so system shortcuts (Mission Control, Spaces) accept the
+    /// synthetic sequence.
+    public static func modifierKeyCodes(for flags: CGEventFlags) -> [(CGEventFlags, CGKeyCode)] {
+        var out: [(CGEventFlags, CGKeyCode)] = []
+        if flags.contains(.maskCommand) { out.append((.maskCommand, 55)) }
+        if flags.contains(.maskControl) { out.append((.maskControl, 59)) }
+        if flags.contains(.maskAlternate) { out.append((.maskAlternate, 58)) }
+        if flags.contains(.maskShift) { out.append((.maskShift, 56)) }
+        return out
+    }
 }
