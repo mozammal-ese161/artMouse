@@ -139,11 +139,18 @@ public final class EventTapEngine {
         let input = CGEventTranslation.inputEvent(from: type, event)
         let outcome = router.handle(input)
         // --debug-buttons (continued): the routing outcome shows whether a
-        // binding matched (consume) or the button fell through (passThrough).
+        // binding matched (consume) or the event fell through (passThrough).
+        // Scroll events are included: tilt-direction matching is exactly the
+        // kind of sign/direction assumption this log exists to verify.
         if Self.debugButtonLog != nil,
            type == .leftMouseDown || type == .leftMouseUp || type == .rightMouseDown
            || type == .rightMouseUp || type == .otherMouseDown || type == .otherMouseUp {
             let line = "  -> outcome=\(outcome)\n"
+            try? Self.debugButtonLog?.write(contentsOf: line.data(using: .utf8)!)
+        }
+        if Self.debugButtonLog != nil, type == .scrollWheel,
+           case .scrolled(let axis, let ticks) = input {
+            let line = "  SCROLL axis=\(axis == .vertical ? "v" : "h") ticks=\(ticks) outcome=\(outcome)\n"
             try? Self.debugButtonLog?.write(contentsOf: line.data(using: .utf8)!)
         }
         switch outcome {
