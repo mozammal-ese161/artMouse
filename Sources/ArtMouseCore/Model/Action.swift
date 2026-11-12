@@ -21,6 +21,13 @@ public enum Action: Hashable, Codable {
         return false
     }
 
+    /// True for keyboard-macro actions: scroll gestures fire these once per
+    /// gesture (debounced) rather than once per tick.
+    public var isMacroAction: Bool {
+        if case .macro = self { return true }
+        return false
+    }
+
     /// Click-lock bindings match regardless of the modifier set.
     public var isClickLock: Bool {
         if case .click(.clickLock, _) = self { return true }

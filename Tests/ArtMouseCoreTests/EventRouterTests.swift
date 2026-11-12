@@ -527,3 +527,43 @@ final class RouterMacroTests: XCTestCase {
         XCTAssertEqual(engine.stopped, [], "engine side is handled by stopAll at bootstrap level, not per-button")
     }
 }
+
+
+final class ScrollMacroDebounceTests: XCTestCase {
+    private func makeStore(_ settings: GlobalSettings) -> SettingsStore {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let store = SettingsStore(directory: dir)
+        store.settings = settings
+        return store
+    }
+
+    private func macroBinding() -> ScrollBinding {
+        ScrollBinding(axis: .horizontal, direction: .right, actions: [
+            .macro(steps: [.enterKey(keyCode: 124, mods: [.control])],
+                   repeatMode: .none, repeatIntervalMS: 0, modifierProxy: false),
+        ])
+    }
+
+    func testScrollMacroFiresOncePerGesture() {
+        // Tilt gestures emit tick bursts: the chord macro fires once per
+        // gesture window, not once per tick — a burst of Ctrl+arrows jumps
+        // through several Spaces and lands back where it started.
+        let macros = RecordingMacroEngine()
+        let executor = ActionExecutor(poster: RecordingPoster(), macros: macros)
+        var settings = GlobalSettings.default
+        settings.scrollBindings = [macroBinding()]
+        let router = EventRouter(settings: makeStore(settings), executor: executor,
+                                 clickLock: StubClickLock(), cursor: StubCursor(),
+                                 macros: macros)
+        XCTAssertEqual(macros.runOncePrograms.count, 0)
+        XCTAssertEqual(router.handle(.scrolled(axis: .horizontal, ticks: 3)), .consume)
+        XCTAssertEqual(macros.runOncePrograms.count, 1)
+        XCTAssertEqual(router.handle(.scrolled(axis: .horizontal, ticks: 2)), .consume)
+        XCTAssertEqual(router.handle(.scrolled(axis: .horizontal, ticks: 1)), .consume)
+        XCTAssertEqual(macros.runOncePrograms.count, 1)   // burst swallowed
+        Thread.sleep(forTimeInterval: EventRouter.macroGestureDebounce + 0.05)
+        XCTAssertEqual(router.handle(.scrolled(axis: .horizontal, ticks: 2)), .consume)
+        XCTAssertEqual(macros.runOncePrograms.count, 2)   // next gesture fires again
+    }
+}

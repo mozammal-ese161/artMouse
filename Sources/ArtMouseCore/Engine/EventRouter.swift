@@ -30,6 +30,9 @@ public protocol MacroCoordinating: AnyObject {
 }
 
 public final class EventRouter: EventRouting {
+    /// Debounce window for scroll-gesture macro firing.
+    public static let macroGestureDebounce: TimeInterval = 0.3
+
     private let settings: SettingsStore
     private let executor: ActionExecuting
     private let clickLock: ClickLockCoordinating
@@ -57,6 +60,9 @@ public final class EventRouter: EventRouting {
     /// the current bindings so a mid-press unbind/rebind still delivers noteUp
     /// on button-up instead of stranding the coordinator in sticky-down.
     private var clickLockButtons: Set<ButtonID> = []
+    /// Last fire time per scroll-binding (macro actions only): tilt gestures
+    /// emit tick bursts and the chord action fires once per gesture window.
+    private var lastMacroGesture: [UUID: Date] = [:]
     /// Buttons whose press started a hold-mode macro program, recorded from
     /// the bindings at down time. Mirrors `heldButtons`/`clickLockButtons`:
     /// tracked independently of the current bindings so a mid-hold unbind
@@ -103,6 +109,19 @@ public final class EventRouter: EventRouting {
     private func handleScroll(axis: ScrollAxis, ticks: Double) -> RouterOutcome {
         guard ticks != 0 else { return .passThrough }
         if let binding = scrollBinding(axis: axis, ticks: ticks) {
+            // A tilt GESTURE emits a burst of ticks; a keyboard-chord action
+            // must fire once per gesture — per-tick firing posts a barrage of
+            // Ctrl+arrows that jumps through several Spaces and lands back
+            // where it started (hardware-verified failure). Non-macro
+            // actions keep per-tick firing (scroll specs amplify per tick
+            // by design).
+            if binding.actions.contains(where: \.isMacroAction) {
+                if let last = lastMacroGesture[binding.id],
+                   Date().timeIntervalSince(last) < Self.macroGestureDebounce {
+                    return .consume   // swallow the rest of the burst
+                }
+                lastMacroGesture[binding.id] = Date()
+            }
             for action in binding.actions { executor.perform(action) }
             return .consume
         }
